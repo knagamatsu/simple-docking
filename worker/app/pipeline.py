@@ -5,6 +5,10 @@ from typing import Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from vina import Vina
+from meeko import MoleculePreparation
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from app.models import Ligand, LigandConformer, Protein, Result, Run, Task
 from app.settings import Settings
@@ -19,24 +23,7 @@ def write_log(log_path: Path, lines: list[str]) -> None:
     log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def fallback_pdb(ligand_name: str) -> str:
-    return (
-        "HEADER    LIGAND\n"
-        f"REMARK    {ligand_name}\n"
-        "ATOM      1  C   LIG A   1       0.000   0.000   0.000  1.00  0.00           C\n"
-        "ATOM      2  O   LIG A   1       1.200   0.000   0.000  1.00  0.00           O\n"
-        "TER\n"
-        "END\n"
-    )
-
-
 def generate_pdb_block(ligand: Ligand) -> str:
-    try:
-        from rdkit import Chem
-        from rdkit.Chem import AllChem
-    except Exception:
-        return fallback_pdb(ligand.name or ligand.id)
-
     mol = None
     if ligand.smiles:
         mol = Chem.MolFromSmiles(ligand.smiles)
@@ -53,14 +40,7 @@ def generate_pdb_block(ligand: Ligand) -> str:
     return Chem.MolToPDBBlock(mol)
 
 
-def compute_mock_score(task: Task, ligand: Ligand, protein: Protein) -> float:
-    seed = f"{task.id}:{ligand.id}:{protein.id}".encode("utf-8")
-    digest = hashlib.sha256(seed).hexdigest()
-    value = int(digest[:6], 16)
-    return -1.0 * (value % 1000) / 100.0
-
-
-def prepare_conformer(
+def prepare_conformer_pdbqt(
     settings: Settings,
     session: Session,
     ligand: Ligand,
@@ -73,11 +53,29 @@ def prepare_conformer(
     pdb_path = ligand_dir / f"conf_{conformer.idx}.pdb"
     pdbqt_path = ligand_dir / f"conf_{conformer.idx}.pdbqt"
 
-    if not pdb_path.exists():
-        pdb_block = generate_pdb_block(ligand)
-        pdb_path.write_text(pdb_block, encoding="utf-8")
-        pdbqt_path.write_text(pdb_block, encoding="utf-8")
-        log_lines.append(f"Generated conformer {conformer.idx}")
+    if not pdbqt_path.exists():
+        # Load molecule for Meeko
+        mol = None
+        if ligand.smiles:
+            mol = Chem.MolFromSmiles(ligand.smiles)
+        elif ligand.molfile:
+            mol = Chem.MolFromMolBlock(ligand.molfile)
+        
+        if mol:
+            mol = Chem.AddHs(mol)
+            AllChem.EmbedMolecule(mol)
+            
+            # Meeko preparation
+            preparator = MoleculePreparation()
+            preparator.prepare(mol)
+            pdbqt_string = preparator.write_pdbqt_string()
+            
+            pdbqt_path.write_text(pdbqt_string, encoding="utf-8")
+            
+            # Also save PDB for reference if needed, though strictly we use PDBQT for Vina
+            Chem.MolToPDBFile(mol, str(pdb_path))
+            
+            log_lines.append(f"Generated PDBQT for conformer {conformer.idx}")
 
     conformer.pdb_path = str(pdb_path.relative_to(Path(settings.object_store_path)))
     conformer.pdbqt_path = str(pdbqt_path.relative_to(Path(settings.object_store_path)))
@@ -109,36 +107,56 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
             session.add(ligand)
             raise RuntimeError("Missing ligand input")
 
+        ligand_pdbqt: Path = None
         if conformer:
-            prepare_conformer(settings, session, ligand, conformer, log_lines)
+            _, ligand_pdbqt = prepare_conformer_pdbqt(settings, session, ligand, conformer, log_lines)
+        else:
+            # Fallback for on-the-fly prep if no conformer pre-generated
+             # (Simplified for MVP: create a temporary conformer logic or just re-use prep)
+             pass 
 
         receptor_path = Path(settings.protein_library_path) / protein.receptor_pdbqt_path
         if not receptor_path.exists():
-            raise RuntimeError("Receptor file not found")
+            raise RuntimeError(f"Receptor file not found: {receptor_path}")
 
-        score = compute_mock_score(task, ligand, protein)
+        # Vina Setup
+        v = Vina(sf_name='vina')
+        v.set_receptor(str(receptor_path))
+        v.set_ligand_from_file(str(ligand_pdbqt))
+
+        # Box
+        box = protein.default_box_json or {}
+        center = box.get("center", [0, 0, 0])
+        size = box.get("size", [20, 20, 20])
+        v.compute_vina_maps(center=center, box_size=size)
+
+        # Dock
+        log_lines.append(f"Starting Vina docking with center={center}, size={size}")
+        v.dock(exhaustiveness=8, n_poses=5)
+        
+        # Save Pose
         pose_dir = Path(settings.object_store_path) / "poses" / task.id
         ensure_dir(pose_dir)
-        pose_path = pose_dir / "pose_0.pdb"
-
-        if conformer and conformer.pdb_path:
-            source = Path(settings.object_store_path) / conformer.pdb_path
-            pose_path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-        else:
-            pose_path.write_text(fallback_pdb(ligand.name or ligand.id), encoding="utf-8")
+        pose_path = pose_dir / "pose_0.pdbqt"
+        
+        v.write_poses(str(pose_path), n_poses=1, overwrite=True)
+        
+        # Get Score
+        energies = v.energies(n_poses=1)
+        best_score = energies[0][0] if energies else 0.0
 
         result = Result(
             task_id=task.id,
-            best_score=score,
+            best_score=best_score,
             pose_paths_json=[str(pose_path.relative_to(Path(settings.object_store_path)))],
-            metrics_json={"mock": True},
+            metrics_json={"engine": "vina", "exhaustiveness": 8},
         )
         session.add(result)
 
         task.status = "SUCCEEDED"
         task.finished_at = datetime.utcnow()
 
-        log_lines.append(f"Score: {score}")
+        log_lines.append(f"Vina finished. Best score: {best_score}")
 
     except Exception as exc:
         task.status = "FAILED"

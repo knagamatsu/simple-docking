@@ -13,13 +13,15 @@ export default function Viewer({ receptorText, poseText }) {
     });
 
     if (receptorText) {
-      viewer.addModel(receptorText, "pdb");
+      viewer.addModel(receptorText, "pdb"); // Receptor is usually PDB or PDBQT. 3Dmol.js auto-detects often but 'pdb' is safe for typical PDBs.
       viewer.setStyle({}, { cartoon: { color: "#5db7a3" } });
     }
     if (poseText) {
-      viewer.addModel(poseText, "pdb");
+      // Auto-detect format based on content or prop could be better, but assuming pdbqt if it looks like one
+      const format = poseText.includes("ROOT") || poseText.includes("TORSDOF") ? "pdbqt" : "pdb";
+      viewer.addModel(poseText, format);
       viewer.setStyle({ resn: "LIG" }, { stick: { color: "#f3b04b" } });
-      viewer.setStyle({ hetflag: true }, { stick: { color: "#f3b04b" } });
+      viewer.setStyle({ hetflag: true }, { stick: { color: "#f3b04b" } }); // Fallback
     }
     viewer.zoomTo();
     viewer.render();

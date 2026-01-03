@@ -10,7 +10,10 @@ dependencies = [
   "redis==5.0.8",
   "pydantic==2.8.2",
   "pydantic-settings==2.4.0",
-  "rdkit-pypi==2022.9.5"
+  "rdkit-pypi==2022.9.5",
+  "vina==1.2.5",
+  "meeko==0.5.0",
+  "scipy==1.13.0"
 ]
 
 [build-system]

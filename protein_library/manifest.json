@@ -1,0 +1,12 @@
+[
+  {
+    "id": "prot_001",
+    "name": "Example Kinase A",
+    "category": "Kinase",
+    "organism": "Homo sapiens",
+    "source_id": "PDB:XXXX",
+    "receptor_pdbqt": "receptors/prot_001/receptor.pdbqt",
+    "default_box": {"center": [0.0, 0.0, 0.0], "size": [22.0, 22.0, 22.0]},
+    "notes": "preprocessed"
+  }
+]

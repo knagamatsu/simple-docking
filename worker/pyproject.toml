@@ -12,8 +12,9 @@ dependencies = [
   "pydantic-settings==2.4.0",
   "rdkit-pypi==2022.9.5",
   "meeko==0.5.0",
-  "scipy==1.13.0",
-  "pandas==2.2.3"
+  "numpy==1.23.5",
+  "scipy==1.9.3",
+  "pandas==1.5.3"
 ]
 
 [build-system]

@@ -2,10 +2,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 import logging
+import zipfile
+import io
+import csv
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -434,6 +437,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     f"{mol_block}\n> <Protein>\n{row['protein_name']}\n> <Score>\n{row['best_score']}\n$$$$"
                 )
             return PlainTextResponse("\n".join(blocks), media_type="chemical/x-mdl-sdfile")
+
+        if fmt == "zip":
+            # Create ZIP file in memory
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                # Add summary CSV
+                csv_buffer = io.StringIO()
+                csv_writer = csv.DictWriter(
+                    csv_buffer, fieldnames=["protein_id", "protein_name", "best_score", "status", "pose_count"]
+                )
+                csv_writer.writeheader()
+
+                for task in tasks:
+                    protein = proteins.get(task.protein_id)
+                    result = result_by_task.get(task.id)
+                    pose_paths = result.pose_paths_json or [] if result else []
+
+                    csv_writer.writerow({
+                        "protein_id": task.protein_id,
+                        "protein_name": protein.name if protein else task.protein_id,
+                        "best_score": result.best_score if result else None,
+                        "status": task.status,
+                        "pose_count": len(pose_paths),
+                    })
+
+                    # Add pose files to ZIP
+                    for idx, pose_path in enumerate(pose_paths, 1):
+                        abs_pose_path = Path(settings.object_store_path) / pose_path
+                        if abs_pose_path.exists():
+                            protein_name_safe = (protein.name if protein else task.protein_id).replace(" ", "_")
+                            zip_file.write(
+                                abs_pose_path,
+                                arcname=f"{protein_name_safe}/pose_{idx}.pdbqt"
+                            )
+
+                zip_file.writestr("summary.csv", csv_buffer.getvalue())
+
+            zip_buffer.seek(0)
+            return StreamingResponse(
+                zip_buffer,
+                media_type="application/zip",
+                headers={"Content-Disposition": f"attachment; filename=run_{run_id}_results.zip"}
+            )
 
         raise HTTPException(status_code=400, detail="Unsupported format")
 

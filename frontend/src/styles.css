@@ -172,6 +172,12 @@ a {
   color: var(--ink);
 }
 
+.step.clickable:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  transition: all 0.2s ease;
+}
+
 .input-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -286,6 +292,21 @@ textarea {
   padding: 10px 14px;
   border-radius: 999px;
   cursor: pointer;
+}
+
+.button-secondary {
+  border: 1px solid var(--accent);
+  background: white;
+  color: var(--accent);
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.button-secondary:hover {
+  background: rgba(46, 125, 106, 0.1);
 }
 
 .filters {

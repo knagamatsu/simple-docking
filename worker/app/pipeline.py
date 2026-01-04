@@ -204,12 +204,12 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
         task.error = error_detail
         log_lines.append(f"ERROR: {error_detail}")
         logger.error(f"Task {task.id} failed: {error_detail}")
-    except RuntimeError as re:
+    except RuntimeError as runtime_error:
         task.status = "FAILED"
         task.finished_at = datetime.utcnow()
-        task.error = str(re)
-        log_lines.append(f"ERROR: {re}")
-        logger.error(f"Task {task.id} failed: {re}")
+        task.error = str(runtime_error)
+        log_lines.append(f"ERROR: {runtime_error}")
+        logger.error(f"Task {task.id} failed: {runtime_error}")
     except Exception as exc:
         task.status = "FAILED"
         task.finished_at = datetime.utcnow()

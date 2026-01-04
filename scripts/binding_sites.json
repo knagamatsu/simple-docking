@@ -1,0 +1,102 @@
+[
+  {
+    "id": "prot_cdk2",
+    "name": "CDK2 (Cyclin-dependent kinase 2)",
+    "pdb_id": "1M17",
+    "center": [
+      22.013689655172417,
+      0.2528275862068965,
+      52.79403448275862
+    ],
+    "box_size": [
+      35.709,
+      24.684,
+      27.099000000000004
+    ],
+    "ligands_found": [
+      "AQ4"
+    ],
+    "expected_ligand": "ATP"
+  },
+  {
+    "id": "prot_egfr",
+    "name": "EGFR kinase domain",
+    "pdb_id": "4I23",
+    "center": [
+      -0.3743636363636364,
+      -52.854409090909094,
+      -23.161363636363635
+    ],
+    "box_size": [
+      24.229,
+      24.650000000000006,
+      32.876999999999995
+    ],
+    "ligands_found": [
+      "1C9"
+    ],
+    "expected_ligand": "03P"
+  },
+  {
+    "id": "prot_src",
+    "name": "Src tyrosine kinase",
+    "pdb_id": "2SRC",
+    "center": [
+      20.448808510638298,
+      29.054382978723407,
+      67.807
+    ],
+    "box_size": [
+      40.75,
+      51.114999999999995,
+      53.684
+    ],
+    "ligands_found": [
+      "PTR",
+      "ANP"
+    ],
+    "expected_ligand": "ANP"
+  },
+  {
+    "id": "prot_pka",
+    "name": "PKA (cAMP-dependent protein kinase)",
+    "pdb_id": "1ATP",
+    "center": [
+      13.835055555555554,
+      12.695833333333335,
+      -3.24587037037037
+    ],
+    "box_size": [
+      39.117000000000004,
+      53.268,
+      42.846999999999994
+    ],
+    "ligands_found": [
+      "ATP",
+      "TPO",
+      "SEP",
+      "MN"
+    ],
+    "expected_ligand": "ATP"
+  },
+  {
+    "id": "prot_abl",
+    "name": "ABL tyrosine kinase",
+    "pdb_id": "1IEP",
+    "center": [
+      13.9582,
+      74.32860000000001,
+      36.655075
+    ],
+    "box_size": [
+      35.769,
+      86.976,
+      87.595
+    ],
+    "ligands_found": [
+      "STI",
+      "CL"
+    ],
+    "expected_ligand": "PRC"
+  }
+]

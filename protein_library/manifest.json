@@ -8,17 +8,17 @@
     "receptor_pdbqt": "receptors/prot_cdk2/receptor.pdbqt",
     "default_box": {
       "center": [
-        23.271447265625,
-        9.822209765625,
-        59.342621484375
+        22.013689655172417,
+        0.2528275862068965,
+        52.79403448275862
       ],
       "size": [
-        22.0,
-        22.0,
-        22.0
+        35.709,
+        24.684,
+        27.099000000000004
       ]
     },
-    "notes": "Cell cycle regulator, cancer target"
+    "notes": "Cell cycle regulator, cancer target. Binding site from AQ4 (ATP analog)"
   },
   {
     "id": "prot_egfr",
@@ -29,17 +29,17 @@
     "receptor_pdbqt": "receptors/prot_egfr/receptor.pdbqt",
     "default_box": {
       "center": [
-        9.86957690738474,
-        -59.99254671562627,
-        -25.327965728274172
+        -0.3743636363636364,
+        -52.854409090909094,
+        -23.161363636363635
       ],
       "size": [
-        22.0,
-        22.0,
-        22.0
+        24.229,
+        24.650000000000006,
+        32.876999999999995
       ]
     },
-    "notes": "Epidermal growth factor receptor, cancer target"
+    "notes": "Epidermal growth factor receptor, cancer target. Binding site from 1C9 (inhibitor)"
   },
   {
     "id": "prot_src",
@@ -50,17 +50,17 @@
     "receptor_pdbqt": "receptors/prot_src/receptor.pdbqt",
     "default_box": {
       "center": [
-        20.40619872286079,
-        33.57408659003831,
-        67.22943652618136
+        20.448808510638298,
+        29.054382978723407,
+        67.807
       ],
       "size": [
-        22.0,
-        22.0,
-        22.0
+        40.75,
+        51.114999999999995,
+        53.684
       ]
     },
-    "notes": "Proto-oncogene, cancer target"
+    "notes": "Proto-oncogene, cancer target. Binding site from ANP (ATP analog)"
   },
   {
     "id": "prot_pka",
@@ -71,17 +71,17 @@
     "receptor_pdbqt": "receptors/prot_pka/receptor.pdbqt",
     "default_box": {
       "center": [
-        10.098587622149838,
-        2.1175368078175896,
-        -2.462897719869707
+        13.835055555555554,
+        12.695833333333335,
+        -3.24587037037037
       ],
       "size": [
-        22.0,
-        22.0,
-        22.0
+        39.117000000000004,
+        53.268,
+        42.846999999999994
       ]
     },
-    "notes": "Signal transduction, classical kinase example"
+    "notes": "Signal transduction, classical kinase example. Binding site from ATP"
   },
   {
     "id": "prot_abl",
@@ -92,16 +92,16 @@
     "receptor_pdbqt": "receptors/prot_abl/receptor.pdbqt",
     "default_box": {
       "center": [
-        14.107278980891719,
-        72.36596093418258,
-        39.69199766454353
+        13.9582,
+        74.32860000000001,
+        36.655075
       ],
       "size": [
-        22.0,
-        22.0,
-        22.0
+        35.769,
+        86.976,
+        87.595
       ]
     },
-    "notes": "BCR-ABL fusion protein, leukemia target"
+    "notes": "BCR-ABL fusion protein, leukemia target. Binding site from STI (Gleevec/Imatinib)"
   }
 ]

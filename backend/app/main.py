@@ -1,10 +1,14 @@
 from datetime import datetime
 from pathlib import Path
 from typing import List
+import logging
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -22,8 +26,14 @@ from app.schemas import (
     TaskOut,
 )
 from app.settings import Settings
-from app.tasks import enqueue_task
+from app.tasks import enqueue_task, cancel_task
 from app.util import load_protein_manifest, resolve_path
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 PRESETS = {
     "fast": {"num_conformers": 5, "exhaustiveness": 4, "num_poses": 5},
@@ -35,13 +45,20 @@ PRESETS = {
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title="Simple Docking API")
+
+    # CORS middleware with configurable origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
+        allow_origins=settings.cors_origins,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
     )
+
+    # Rate limiting
+    limiter = Limiter(key_func=get_remote_address, enabled=settings.rate_limit_enabled)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     engine = create_engine_from_settings(settings)
     session_factory = create_session_factory(engine)
@@ -65,20 +82,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.post("/ligands", response_model=LigandCreateResponse)
-    def create_ligand(payload: LigandCreate, session: Session = Depends(get_session)):
+    @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
+    def create_ligand(request: Request, payload: LigandCreate, session: Session = Depends(get_session)):
         if not payload.smiles and not payload.molfile:
             raise HTTPException(status_code=400, detail="smiles or molfile is required")
 
-        ligand = Ligand(
-            name=payload.name,
-            smiles=payload.smiles,
-            molfile=payload.molfile,
-            input_type="SMILES" if payload.smiles else "MOLFILE",
-            status="READY",
-        )
-        session.add(ligand)
-        session.commit()
-        return LigandCreateResponse(ligand_id=ligand.id, status=ligand.status)
+        # Basic validation
+        if payload.smiles and len(payload.smiles) > 1000:
+            raise HTTPException(status_code=400, detail="SMILES too long (max 1000 characters)")
+        if payload.molfile and len(payload.molfile) > 100000:
+            raise HTTPException(status_code=400, detail="Molfile too large (max 100KB)")
+
+        try:
+            ligand = Ligand(
+                name=payload.name,
+                smiles=payload.smiles,
+                molfile=payload.molfile,
+                input_type="SMILES" if payload.smiles else "MOLFILE",
+                status="READY",
+            )
+            session.add(ligand)
+            session.commit()
+            logger.info(f"Created ligand {ligand.id}")
+            return LigandCreateResponse(ligand_id=ligand.id, status=ligand.status)
+        except Exception as e:
+            logger.error(f"Failed to create ligand: {e}")
+            session.rollback()
+            raise HTTPException(status_code=500, detail="Failed to create ligand")
 
     @app.get("/ligands/{ligand_id}", response_model=LigandOut)
     def get_ligand(ligand_id: str, session: Session = Depends(get_session)):
@@ -142,7 +172,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ]
 
     @app.post("/runs", response_model=RunCreateResponse)
-    def create_run(payload: RunCreate, session: Session = Depends(get_session)):
+    @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
+    def create_run(request: Request, payload: RunCreate, session: Session = Depends(get_session)):
         ligand = session.get(Ligand, payload.ligand_id)
         if not ligand:
             raise HTTPException(status_code=404, detail="Ligand not found")
@@ -314,6 +345,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         return TaskOut(id=task.id, status=task.status, error=task.error, log_path=task.log_path)
+
+    @app.post("/tasks/{task_id}/cancel")
+    def cancel_task_endpoint(task_id: str, session: Session = Depends(get_session)):
+        task = session.get(Task, task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        if task.status not in ["PENDING", "RUNNING"]:
+            raise HTTPException(status_code=400, detail=f"Cannot cancel task with status {task.status}")
+
+        try:
+            cancel_task(settings, task_id)
+            task.status = "CANCELLED"
+            task.error = "Cancelled by user"
+            session.commit()
+            logger.info(f"Cancelled task {task_id}")
+            return {"status": "cancelled", "task_id": task_id}
+        except Exception as e:
+            logger.error(f"Failed to cancel task {task_id}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to cancel task")
+
+    @app.post("/runs/{run_id}/cancel")
+    def cancel_run(run_id: str, session: Session = Depends(get_session)):
+        run = session.get(Run, run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+
+        tasks = session.execute(select(Task).where(Task.run_id == run_id)).scalars().all()
+        cancelled_count = 0
+
+        for task in tasks:
+            if task.status in ["PENDING", "RUNNING"]:
+                try:
+                    cancel_task(settings, task.id)
+                    task.status = "CANCELLED"
+                    task.error = "Cancelled by user"
+                    cancelled_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to cancel task {task.id}: {e}")
+
+        session.commit()
+        logger.info(f"Cancelled {cancelled_count} tasks for run {run_id}")
+        return {"status": "cancelled", "run_id": run_id, "cancelled_tasks": cancelled_count}
 
     @app.get("/runs/{run_id}/export")
     def export_run(run_id: str, fmt: str = Query(default="csv"), session: Session = Depends(get_session)):

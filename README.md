@@ -8,8 +8,8 @@
    ```bash
    docker compose up --build
    ```
-3. ブラウザで UI を開く  
-   - http://localhost:3001
+3. ブラウザで UI を開く
+   - http://localhost:8090/simple-docking
 
 ## 構成
 - `frontend/`: React UI（4画面＋ダッシュボード）
@@ -19,8 +19,8 @@
 - `data/object_store/`: 生成成果物（ポーズ/ログなど）
 
 ## API
-- API: `http://localhost:8000`
-- OpenAPI: `http://localhost:8000/docs`
+- API: `http://localhost:8090/simple-docking/api`
+- OpenAPI: `http://localhost:8090/simple-docking/api/docs`
 
 ## 依存関係
 `uv` を使って Python 依存を固定しています（`uv.lock` 参照）。
@@ -44,11 +44,23 @@ uv run --extra test pytest
 - **新規実行**: ダッシュボードまたはルート（`/`）からウィザード形式で新しいドッキングを開始できます。
 
 ## ドッキングロジック（Logic）
-現在のMVP版では、実際の物理計算（Vina/P2Rank等）の代わりに**決定論的なモック（擬似）ロジック**を使用しています。
+**実際のAutoDock Vinaを使用した分子ドッキング計算**を実行しています。
 - **ファイル**: `worker/app/pipeline.py`
-- **関数**: `compute_mock_score`
-- **仕組み**: タスクID、リガンドID、タンパク質IDの組み合わせからハッシュ値を生成し、それをスコア（例: -9.xx kcal/mol）として返します。
-    - これにより、同じ入力に対しては常に同じ結果が返ります。
-    - 計算負荷がかからないため、即座に結果を確認できます。
-    - 将来的にはこの関数を実際のドッキングソフトウェア（AutoDock Vinaなど）の呼び出しに置き換える設計になっています。
+- **エンジン**: AutoDock Vina（サブプロセス経由で実行）
+- **分子準備**: RDKit（3D構造生成・最適化） + Meeko（PDBQT変換）
+- **処理フロー**:
+  1. SMILES/Molfile → RDKitで3D構造生成
+  2. MeekoでPDBQT形式に変換
+  3. Vinaでドッキング計算（exhaustiveness=8）
+  4. 結果のスコア・ポーズを保存
+
+## MVP版の制限事項
+現在のMVP実装には以下の制限があります:
+- 認証・認可機能なし（誰でもアクセス可能）
+- タンパク質ライブラリがサンプル1件のみ
+- タスクキャンセル機能なし
+- ログ・監視システム未実装
+- レート制限なし
+
+本番運用には追加の実装が必要です。詳細は[AGENTS.md](AGENTS.md)を参照してください。
 

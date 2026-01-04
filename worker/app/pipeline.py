@@ -1,6 +1,7 @@
 import hashlib
 import subprocess
 import re
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
@@ -13,6 +14,12 @@ from rdkit.Chem import AllChem
 
 from app.models import Ligand, LigandConformer, Protein, Result, Run, Task
 from app.settings import Settings
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 
 def ensure_dir(path: Path) -> None:
@@ -57,26 +64,42 @@ def prepare_conformer_pdbqt(
     if not pdbqt_path.exists():
         # Load molecule for Meeko
         mol = None
-        if ligand.smiles:
-            mol = Chem.MolFromSmiles(ligand.smiles)
-        elif ligand.molfile:
-            mol = Chem.MolFromMolBlock(ligand.molfile)
-        
-        if mol:
-            mol = Chem.AddHs(mol)
-            AllChem.EmbedMolecule(mol)
-            
-            # Meeko preparation
-            preparator = MoleculePreparation()
-            preparator.prepare(mol)
-            pdbqt_string = preparator.write_pdbqt_string()
-            
-            pdbqt_path.write_text(pdbqt_string, encoding="utf-8")
-            
-            # Also save PDB for reference if needed
-            Chem.MolToPDBFile(mol, str(pdb_path))
-            
-            log_lines.append(f"Generated PDBQT for conformer {conformer.idx}")
+        try:
+            if ligand.smiles:
+                mol = Chem.MolFromSmiles(ligand.smiles)
+                if mol is None:
+                    raise ValueError(f"Invalid SMILES: {ligand.smiles}")
+            elif ligand.molfile:
+                mol = Chem.MolFromMolBlock(ligand.molfile)
+                if mol is None:
+                    raise ValueError("Invalid Molfile")
+
+            if mol:
+                mol = Chem.AddHs(mol)
+                embed_status = AllChem.EmbedMolecule(mol)
+                if embed_status != 0:
+                    raise ValueError(f"Failed to embed molecule (status: {embed_status})")
+
+                # Meeko preparation
+                preparator = MoleculePreparation()
+                preparator.prepare(mol)
+                pdbqt_string = preparator.write_pdbqt_string()
+
+                if not pdbqt_string:
+                    raise ValueError("Failed to generate PDBQT string")
+
+                pdbqt_path.write_text(pdbqt_string, encoding="utf-8")
+
+                # Also save PDB for reference if needed
+                Chem.MolToPDBFile(mol, str(pdb_path))
+
+                log_lines.append(f"Generated PDBQT for conformer {conformer.idx}")
+                logger.info(f"Successfully prepared PDBQT for ligand {ligand.id}, conformer {conformer.idx}")
+        except Exception as e:
+            error_msg = f"Failed to prepare PDBQT: {str(e)}"
+            log_lines.append(f"ERROR: {error_msg}")
+            logger.error(f"Ligand {ligand.id}, conformer {conformer.idx}: {error_msg}")
+            raise RuntimeError(error_msg)
 
     conformer.pdb_path = str(pdb_path.relative_to(Path(settings.object_store_path)))
     conformer.pdbqt_path = str(pdbqt_path.relative_to(Path(settings.object_store_path)))
@@ -92,6 +115,8 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
     task.status = "RUNNING"
     task.attempts += 1
     session.commit()
+
+    logger.info(f"Starting task {task.id} (attempt {task.attempts})")
 
     try:
         run = session.get(Run, task.run_id)
@@ -170,17 +195,28 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
         task.finished_at = datetime.utcnow()
 
         log_lines.append(f"Vina finished. Best score: {best_score}")
+        logger.info(f"Task {task.id} completed successfully. Score: {best_score}")
 
     except subprocess.CalledProcessError as cpe:
         task.status = "FAILED"
         task.finished_at = datetime.utcnow()
-        task.error = f"Vina crashed: {cpe.stderr}"
-        log_lines.append(f"ERROR: {cpe.stderr}")
+        error_detail = f"Vina execution failed (exit code {cpe.returncode}): {cpe.stderr}"
+        task.error = error_detail
+        log_lines.append(f"ERROR: {error_detail}")
+        logger.error(f"Task {task.id} failed: {error_detail}")
+    except RuntimeError as re:
+        task.status = "FAILED"
+        task.finished_at = datetime.utcnow()
+        task.error = str(re)
+        log_lines.append(f"ERROR: {re}")
+        logger.error(f"Task {task.id} failed: {re}")
     except Exception as exc:
         task.status = "FAILED"
         task.finished_at = datetime.utcnow()
-        task.error = str(exc)
-        log_lines.append(f"ERROR: {exc}")
+        error_detail = f"Unexpected error: {type(exc).__name__}: {str(exc)}"
+        task.error = error_detail
+        log_lines.append(f"ERROR: {error_detail}")
+        logger.exception(f"Task {task.id} failed with unexpected error")
     finally:
         log_path = Path(settings.object_store_path) / "logs" / f"{task.id}.txt"
         write_log(log_path, log_lines)

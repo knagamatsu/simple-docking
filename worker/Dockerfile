@@ -2,6 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    zlib1g-dev \
+    autodock-vina \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir uv==0.9.9
 
 COPY pyproject.toml uv.lock /app/

@@ -1,11 +1,12 @@
 import hashlib
+import subprocess
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from vina import Vina
 from meeko import MoleculePreparation
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -72,7 +73,7 @@ def prepare_conformer_pdbqt(
             
             pdbqt_path.write_text(pdbqt_string, encoding="utf-8")
             
-            # Also save PDB for reference if needed, though strictly we use PDBQT for Vina
+            # Also save PDB for reference if needed
             Chem.MolToPDBFile(mol, str(pdb_path))
             
             log_lines.append(f"Generated PDBQT for conformer {conformer.idx}")
@@ -111,39 +112,51 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
         if conformer:
             _, ligand_pdbqt = prepare_conformer_pdbqt(settings, session, ligand, conformer, log_lines)
         else:
-            # Fallback for on-the-fly prep if no conformer pre-generated
-             # (Simplified for MVP: create a temporary conformer logic or just re-use prep)
-             pass 
+            # Fallback for on-the-fly prep
+            pass 
 
         receptor_path = Path(settings.protein_library_path) / protein.receptor_pdbqt_path
         if not receptor_path.exists():
             raise RuntimeError(f"Receptor file not found: {receptor_path}")
 
-        # Vina Setup
-        v = Vina(sf_name='vina')
-        v.set_receptor(str(receptor_path))
-        v.set_ligand_from_file(str(ligand_pdbqt))
-
-        # Box
+        # Vina Setup via Subprocess
         box = protein.default_box_json or {}
         center = box.get("center", [0, 0, 0])
         size = box.get("size", [20, 20, 20])
-        v.compute_vina_maps(center=center, box_size=size)
-
-        # Dock
-        log_lines.append(f"Starting Vina docking with center={center}, size={size}")
-        v.dock(exhaustiveness=8, n_poses=5)
         
-        # Save Pose
         pose_dir = Path(settings.object_store_path) / "poses" / task.id
         ensure_dir(pose_dir)
         pose_path = pose_dir / "pose_0.pdbqt"
+
+        cmd = [
+            "vina",
+            "--receptor", str(receptor_path),
+            "--ligand", str(ligand_pdbqt),
+            "--center_x", str(center[0]),
+            "--center_y", str(center[1]),
+            "--center_z", str(center[2]),
+            "--size_x", str(size[0]),
+            "--size_y", str(size[1]),
+            "--size_z", str(size[2]),
+            "--exhaustiveness", "8",
+            "--out", str(pose_path)
+        ]
         
-        v.write_poses(str(pose_path), n_poses=1, overwrite=True)
+        log_lines.append(f"Running Vina: {' '.join(cmd)}")
+        result_proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        log_lines.append(result_proc.stdout)
         
-        # Get Score
-        energies = v.energies(n_poses=1)
-        best_score = energies[0][0] if energies else 0.0
+        # Parse score from output or file. Vina stdout usually has a table.
+        # Format:
+        # mode |   affinity | dist from best mode
+        #      | (kcal/mol) | rmsd l.b.| rmsd u.b.
+        # -----+------------+----------+----------
+        #    1 |     -7.5   |      0.000 |      0.000
+        
+        best_score = 0.0
+        match = re.search(r"^\s*1\s+([-\d.]+)\s+", result_proc.stdout, re.MULTILINE)
+        if match:
+            best_score = float(match.group(1))
 
         result = Result(
             task_id=task.id,
@@ -158,6 +171,11 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
 
         log_lines.append(f"Vina finished. Best score: {best_score}")
 
+    except subprocess.CalledProcessError as cpe:
+        task.status = "FAILED"
+        task.finished_at = datetime.utcnow()
+        task.error = f"Vina crashed: {cpe.stderr}"
+        log_lines.append(f"ERROR: {cpe.stderr}")
     except Exception as exc:
         task.status = "FAILED"
         task.finished_at = datetime.utcnow()

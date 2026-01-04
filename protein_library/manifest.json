@@ -1,12 +1,107 @@
 [
   {
-    "id": "prot_001",
-    "name": "Example Kinase A",
+    "id": "prot_cdk2",
+    "name": "CDK2 (Cyclin-dependent kinase 2)",
     "category": "Kinase",
     "organism": "Homo sapiens",
-    "source_id": "PDB:XXXX",
-    "receptor_pdbqt": "receptors/prot_001/receptor.pdbqt",
-    "default_box": {"center": [0.0, 0.0, 0.0], "size": [22.0, 22.0, 22.0]},
-    "notes": "preprocessed"
+    "source_id": "PDB:1M17",
+    "receptor_pdbqt": "receptors/prot_cdk2/receptor.pdbqt",
+    "default_box": {
+      "center": [
+        23.271447265625,
+        9.822209765625,
+        59.342621484375
+      ],
+      "size": [
+        22.0,
+        22.0,
+        22.0
+      ]
+    },
+    "notes": "Cell cycle regulator, cancer target"
+  },
+  {
+    "id": "prot_egfr",
+    "name": "EGFR kinase domain",
+    "category": "Kinase",
+    "organism": "Homo sapiens",
+    "source_id": "PDB:4I23",
+    "receptor_pdbqt": "receptors/prot_egfr/receptor.pdbqt",
+    "default_box": {
+      "center": [
+        9.86957690738474,
+        -59.99254671562627,
+        -25.327965728274172
+      ],
+      "size": [
+        22.0,
+        22.0,
+        22.0
+      ]
+    },
+    "notes": "Epidermal growth factor receptor, cancer target"
+  },
+  {
+    "id": "prot_src",
+    "name": "Src tyrosine kinase",
+    "category": "Kinase",
+    "organism": "Gallus gallus",
+    "source_id": "PDB:2SRC",
+    "receptor_pdbqt": "receptors/prot_src/receptor.pdbqt",
+    "default_box": {
+      "center": [
+        20.40619872286079,
+        33.57408659003831,
+        67.22943652618136
+      ],
+      "size": [
+        22.0,
+        22.0,
+        22.0
+      ]
+    },
+    "notes": "Proto-oncogene, cancer target"
+  },
+  {
+    "id": "prot_pka",
+    "name": "PKA (cAMP-dependent protein kinase)",
+    "category": "Kinase",
+    "organism": "Mus musculus",
+    "source_id": "PDB:1ATP",
+    "receptor_pdbqt": "receptors/prot_pka/receptor.pdbqt",
+    "default_box": {
+      "center": [
+        10.098587622149838,
+        2.1175368078175896,
+        -2.462897719869707
+      ],
+      "size": [
+        22.0,
+        22.0,
+        22.0
+      ]
+    },
+    "notes": "Signal transduction, classical kinase example"
+  },
+  {
+    "id": "prot_abl",
+    "name": "ABL tyrosine kinase",
+    "category": "Kinase",
+    "organism": "Homo sapiens",
+    "source_id": "PDB:1IEP",
+    "receptor_pdbqt": "receptors/prot_abl/receptor.pdbqt",
+    "default_box": {
+      "center": [
+        14.107278980891719,
+        72.36596093418258,
+        39.69199766454353
+      ],
+      "size": [
+        22.0,
+        22.0,
+        22.0
+      ]
+    },
+    "notes": "BCR-ABL fusion protein, leukemia target"
   }
 ]

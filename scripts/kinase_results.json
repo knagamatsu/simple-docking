@@ -1,0 +1,77 @@
+[
+  {
+    "id": "prot_cdk2",
+    "name": "CDK2 (Cyclin-dependent kinase 2)",
+    "pdb_id": "1M17",
+    "center": [
+      23.271447265625,
+      9.822209765625,
+      59.342621484375
+    ],
+    "box_size": [
+      22.0,
+      22.0,
+      22.0
+    ]
+  },
+  {
+    "id": "prot_egfr",
+    "name": "EGFR kinase domain",
+    "pdb_id": "4I23",
+    "center": [
+      9.86957690738474,
+      -59.99254671562627,
+      -25.327965728274172
+    ],
+    "box_size": [
+      22.0,
+      22.0,
+      22.0
+    ]
+  },
+  {
+    "id": "prot_src",
+    "name": "Src tyrosine kinase",
+    "pdb_id": "2SRC",
+    "center": [
+      20.40619872286079,
+      33.57408659003831,
+      67.22943652618136
+    ],
+    "box_size": [
+      22.0,
+      22.0,
+      22.0
+    ]
+  },
+  {
+    "id": "prot_pka",
+    "name": "PKA (cAMP-dependent protein kinase)",
+    "pdb_id": "1ATP",
+    "center": [
+      10.098587622149838,
+      2.1175368078175896,
+      -2.462897719869707
+    ],
+    "box_size": [
+      22.0,
+      22.0,
+      22.0
+    ]
+  },
+  {
+    "id": "prot_abl",
+    "name": "ABL tyrosine kinase",
+    "pdb_id": "1IEP",
+    "center": [
+      14.107278980891719,
+      72.36596093418258,
+      39.69199766454353
+    ],
+    "box_size": [
+      22.0,
+      22.0,
+      22.0
+    ]
+  }
+]

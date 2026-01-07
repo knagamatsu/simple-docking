@@ -12,7 +12,7 @@
    - http://localhost:8090/simple-docking
 
 ## 構成
-- `frontend/`: React UI（4画面＋ダッシュボード）
+- `frontend/`: React UI（4画面＋ダッシュボード、2D EditorはKetcher）
 - `backend/`: FastAPI API（Run/Task/Ligand/Protein 管理）
 - `worker/`: Celery worker（ドッキングパイプライン）
 - `protein_library/`: タンパク質ライブラリ＋manifest
@@ -72,4 +72,3 @@ uv run --extra test pytest
     ports:
       - "6379:6379"  # 開発用のみ
 ```
-

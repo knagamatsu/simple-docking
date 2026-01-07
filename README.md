@@ -30,6 +30,7 @@
 ```bash
 PYTHONPATH=. python scripts/import_proteins.py
 ```
+Auto pocket (ligand/protein bbox) options are documented in `docs/protein_library.md`.
 
 ## テスト
 ```bash
@@ -72,4 +73,3 @@ uv run --extra test pytest
     ports:
       - "6379:6379"  # 開発用のみ
 ```
-

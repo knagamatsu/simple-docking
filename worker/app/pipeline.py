@@ -13,6 +13,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from app.models import Ligand, LigandConformer, Protein, Result, Run, Task
+from app.pocket import resolve_box
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -145,9 +146,9 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
             raise RuntimeError(f"Receptor file not found: {receptor_path}")
 
         # Vina Setup via Subprocess
-        box = protein.default_box_json or {}
+        box, pocket_meta = resolve_box(settings, protein, log_lines)
         center = box.get("center", [0, 0, 0])
-        size = box.get("size", [20, 20, 20])
+        size = box.get("size", [settings.pocket_default_size] * 3)
         
         pose_dir = Path(settings.object_store_path) / "poses" / task.id
         ensure_dir(pose_dir)
@@ -187,7 +188,12 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
             task_id=task.id,
             best_score=best_score,
             pose_paths_json=[str(pose_path.relative_to(Path(settings.object_store_path)))],
-            metrics_json={"engine": "vina", "exhaustiveness": 8},
+            metrics_json={
+                "engine": "vina",
+                "exhaustiveness": 8,
+                "pocket": pocket_meta,
+                "box": {"center": center, "size": size},
+            },
         )
         session.add(result)
 

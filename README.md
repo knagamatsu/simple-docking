@@ -11,6 +11,8 @@
 3. ブラウザで UI を開く
    - http://localhost:8090/simple-docking
 
+On-prem and cloud demo deployment notes: `docs/deploy.md`.
+
 ## 構成
 - `frontend/`: React UI（4画面＋ダッシュボード）
 - `backend/`: FastAPI API（Run/Task/Ligand/Protein 管理）
@@ -72,4 +74,3 @@ uv run --extra test pytest
     ports:
       - "6379:6379"  # 開発用のみ
 ```
-

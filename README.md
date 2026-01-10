@@ -14,7 +14,7 @@
 On-prem and cloud demo deployment notes: `docs/deploy.md`.
 
 ## 構成
-- `frontend/`: React UI（4画面＋ダッシュボード）
+- `frontend/`: React UI（4画面＋ダッシュボード、2D EditorはKetcher）
 - `backend/`: FastAPI API（Run/Task/Ligand/Protein 管理）
 - `worker/`: Celery worker（ドッキングパイプライン）
 - `protein_library/`: タンパク質ライブラリ＋manifest

@@ -199,6 +199,31 @@ a {
   align-items: center;
 }
 
+.editor-body {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.ketcher-host {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: white;
+  overflow: hidden;
+  height: 380px;
+}
+
+.ketcher-host > div {
+  height: 100%;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .editor-placeholder {
   border: 1px dashed var(--border);
   border-radius: 12px;

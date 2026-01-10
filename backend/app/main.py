@@ -523,6 +523,12 @@ def seed_proteins(engine, settings: Settings):
 
         records = load_protein_manifest(manifest_path)
         for record in records:
+            meta = {"notes": record.get("notes")}
+            if record.get("receptor_pdb"):
+                meta["receptor_pdb"] = record.get("receptor_pdb")
+            if record.get("pocket_pdb"):
+                meta["pocket_pdb"] = record.get("pocket_pdb")
+
             protein = Protein(
                 id=record["id"],
                 name=record["name"],
@@ -532,7 +538,7 @@ def seed_proteins(engine, settings: Settings):
                 receptor_pdbqt_path=record["receptor_pdbqt"],
                 default_box_json=record.get("default_box"),
                 pocket_method=record.get("pocket_method"),
-                receptor_meta_json={"notes": record.get("notes")},
+                receptor_meta_json=meta,
                 status="READY",
             )
             session.add(protein)

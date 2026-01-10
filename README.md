@@ -32,6 +32,7 @@ On-prem and cloud demo deployment notes: `docs/deploy.md`.
 ```bash
 PYTHONPATH=. python scripts/import_proteins.py
 ```
+Auto pocket (ligand/protein bbox) options are documented in `docs/protein_library.md`.
 
 ## テスト
 ```bash

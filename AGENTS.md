@@ -28,8 +28,68 @@
 - Example: `backend/tests/test_runs.py` covers run creation and status.
 
 ## Commit & Pull Request Guidelines
-- No established commit message convention yet (no commits in repo). Use concise, imperative messages (e.g., “Add run status endpoint”).
+- Use concise, imperative messages (e.g., "Add run status endpoint").
+- Commit message format: Title + body explaining "why" rather than "what".
 - PRs should include: summary, key changes, test results, and UI screenshots when UI changes are made.
+
+## Branch Strategy
+
+### Branch Structure
+- `main`: Production-ready code (stable, deployable at any time)
+- `develop`: Integration branch for development (latest features)
+- `feature/*`: Feature development branches
+- `fix/*`: Bug fix branches
+- `docs/*`: Documentation-only changes
+
+### Workflow
+
+#### Starting New Work
+```bash
+# For new features
+git checkout develop
+git pull origin develop
+git checkout -b feature/your-feature-name
+
+# For bug fixes
+git checkout develop
+git checkout -b fix/bug-description
+```
+
+#### Merging to develop
+```bash
+# When feature is complete
+git checkout develop
+git merge feature/your-feature-name --no-ff
+git push origin develop
+```
+
+#### Releasing to main
+```bash
+# When develop is stable and ready for release
+git checkout main
+git merge develop --no-ff
+git tag -a v0.x.0 -m "Release v0.x.0"
+git push origin main --tags
+```
+
+### Branch Naming Conventions
+- `feature/ketcher-editor` - New features
+- `fix/worker-segfault` - Bug fixes
+- `docs/deploy-demo` - Documentation improvements
+- `refactor/api-structure` - Code refactoring
+
+### Rules
+- Never commit directly to `main`
+- `develop` is the default branch for development
+- Feature branches branch off from `develop`
+- Merge to `develop` first, then to `main` when ready for release
+- Delete feature branches after merging
+- Tag releases on `main` branch
+
+### GitHub Actions Integration
+- Push to `develop`: Runs tests only
+- Push to `main`: Runs tests + builds release
+- Tag `v*`: Triggers full release workflow (Docker images + installer)
 
 ## Configuration & Security Notes
 - Use `.env.example` as a template for runtime config.

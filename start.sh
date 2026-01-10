@@ -52,6 +52,14 @@ if docker compose ps | grep -q "Up"; then
         echo ""
         echo "📱 ブラウザで以下のURLにアクセス:"
         echo "   http://localhost:8090/simple-docking"
+        # ブラウザ自動起動
+        if command -v xdg-open &> /dev/null; then
+            xdg-open http://localhost:8090/simple-docking &
+        elif command -v gnome-open &> /dev/null; then
+            gnome-open http://localhost:8090/simple-docking &
+        elif command -v open &> /dev/null; then
+            open http://localhost:8090/simple-docking &
+        fi
         exit 0
     fi
 fi
@@ -70,7 +78,7 @@ sleep 5
 
 # ヘルスチェック
 for i in {1..30}; do
-    if curl -s http://localhost:8090/simple-docking/api/health > /dev/null 2>&1; then
+    if curl -s http://localhost:8090/simple-docking/ > /dev/null 2>&1; then
         echo "✅ サービスが起動しました！"
         break
     fi
@@ -96,11 +104,11 @@ echo "   再起動:     docker compose restart"
 echo "   状態確認:   docker compose ps"
 echo ""
 
-# ブラウザ自動起動（オプション）
+# ブラウザ自動起動
 if command -v xdg-open &> /dev/null; then
-    read -p "ブラウザを自動起動しますか？ (Y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        xdg-open http://localhost:8090/simple-docking
-    fi
+    xdg-open http://localhost:8090/simple-docking &
+elif command -v gnome-open &> /dev/null; then
+    gnome-open http://localhost:8090/simple-docking &
+elif command -v open &> /dev/null; then
+    open http://localhost:8090/simple-docking &
 fi

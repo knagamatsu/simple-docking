@@ -1,6 +1,6 @@
 import React, { useContext, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ketcher } from "ketcher-react";
+import { Editor } from "ketcher-react";
 import { StandaloneStructServiceProvider } from "ketcher-standalone";
 import { RunContext } from "../App.jsx";
 import { createLigand } from "../api.js";
@@ -11,7 +11,7 @@ const structServiceProvider = new StandaloneStructServiceProvider();
 export default function InputPage() {
   const navigate = useNavigate();
   const { setLigandId } = useContext(RunContext);
-  const ketcherRef = useRef(null);
+  const ketcherInstanceRef = useRef(null);
   const [name, setName] = useState("");
   const [mode, setMode] = useState("smiles");
   const [smiles, setSmiles] = useState("CCO");
@@ -19,6 +19,10 @@ export default function InputPage() {
   const [error, setError] = useState("");
   const [editorError, setEditorError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleKetcherInit = (ketcher) => {
+    ketcherInstanceRef.current = ketcher;
+  };
 
   const handleFile = async (event) => {
     const file = event.target.files?.[0];
@@ -49,19 +53,19 @@ export default function InputPage() {
 
   const handleUseEditor = async () => {
     setEditorError("");
-    if (!ketcherRef.current) {
+    if (!ketcherInstanceRef.current) {
       setEditorError("Editor is not ready yet.");
       return;
     }
     try {
-      const molfileText = await ketcherRef.current.getMolfile();
-      if (!molfileText || !molfileText.trim()) {
+      const smilesText = await ketcherInstanceRef.current.getSmiles();
+      if (!smilesText || !smilesText.trim()) {
         setEditorError("Draw a structure first.");
         return;
       }
-      setMode("molfile");
-      setMolfile(molfileText);
-      setSmiles("");
+      setMode("smiles");
+      setSmiles(smilesText);
+      setMolfile("");
     } catch (err) {
       setEditorError(err.message || "Failed to read from editor.");
     }
@@ -85,7 +89,7 @@ export default function InputPage() {
           </div>
           <div className="editor-body">
             <div className="ketcher-host">
-              <Ketcher ref={ketcherRef} structServiceProvider={structServiceProvider} />
+              <Editor onInit={handleKetcherInit} structServiceProvider={structServiceProvider} />
             </div>
             <div className="editor-actions">
               <button type="button" className="button-secondary" onClick={handleUseEditor}>

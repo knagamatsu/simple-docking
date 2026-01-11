@@ -1,6 +1,6 @@
 # Simple Docking Dashboard
 
-化学者向けの簡易ドッキング評価ダッシュボードです。入力 → 標的 → 設定 → 結果の4ステップで操作できます。
+化学者向けの簡易ドッキング評価ダッシュボードです。入力 → 標的 → 設定 → 結果の4ステップで操作でき、CSV/SDF でのバッチドッキングにも対応しています。
 
 **📖 ユーザーガイド**: 詳しい使い方は [docs/USER_GUIDE.md](docs/USER_GUIDE.md) を参照してください。
 **⚙️ 環境設定**: ポート番号やパスワードなどの設定は [docs/configuration.md](docs/configuration.md) を参照してください。
@@ -24,7 +24,7 @@
 On-prem and cloud demo deployment notes: `docs/deploy.md`.
 
 ## 構成
-- `frontend/`: React UI（4画面＋ダッシュボード、2D EditorはKetcher）
+- `frontend/`: React UI（4画面＋ダッシュボード＋バッチ結果、2D EditorはKetcher）
 - `backend/`: FastAPI API（Run/Task/Ligand/Protein 管理）
 - `worker/`: Celery worker（ドッキングパイプライン）
 - `protein_library/`: タンパク質ライブラリ＋manifest
@@ -67,6 +67,7 @@ uv run --extra test pytest
 ## 画面操作（Navigation）
 - **メイン画面へ戻る**: 画面右上の「Dashboard」リンクをクリックすると、過去の実行履歴一覧（ダッシュボード）に戻れます。
 - **新規実行**: ダッシュボードまたはルート（`/`）からウィザード形式で新しいドッキングを開始できます。
+- **バッチ実行**: Input で Batch を選択し、CSV/SDF をアップロードして複数リガンドを一括実行できます。
 
 ## ドッキングロジック（Logic）
 **実際のAutoDock Vinaを使用した分子ドッキング計算**を実行しています。
@@ -83,8 +84,7 @@ uv run --extra test pytest
 現在の実装には以下の制限があります:
 - 認証・認可機能なし（誰でもアクセス可能）
 - タンパク質ライブラリは 11 件（Kinase/GPCR/Protease/Nuclear receptor）。PDB インポート/貼り付けで追加可能
- - 3DビューアとInteraction Mapは簡易表示（距離ベースの近接解析）
-- バッチ処理未対応（1リガンド×複数タンパク質のみ）
+- 3DビューアとInteraction Mapは簡易表示（距離ベースの近接解析）
 
 本番運用には追加の実装が必要です。詳細は[AGENTS.md](AGENTS.md)を参照してください。
 

@@ -299,6 +299,10 @@ textarea {
   margin-bottom: 12px;
 }
 
+.mode-toggle {
+  margin-bottom: 0;
+}
+
 .segmented button {
   flex: 1;
   border-radius: 999px;
@@ -312,6 +316,24 @@ textarea {
   border-color: var(--accent);
   background: rgba(46, 125, 106, 0.12);
   color: var(--accent);
+}
+
+.batch-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.dashboard-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .file-row {
@@ -843,6 +865,24 @@ textarea {
   background: white;
 }
 
+.batch-run-list {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-run-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: white;
+}
+
 .run-meta {
   display: flex;
   align-items: center;
@@ -865,7 +905,8 @@ textarea {
     align-items: flex-start;
   }
 
-  .run-row {
+  .run-row,
+  .batch-run-row {
     flex-direction: column;
     align-items: flex-start;
   }

@@ -70,6 +70,14 @@ export async function createRun(payload) {
   return response.json();
 }
 
+export async function createBatch(payload) {
+  const response = await request("/batches", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return response.json();
+}
+
 export async function fetchRunStatus(runId) {
   const response = await request(`/runs/${runId}/status`);
   return response.json();
@@ -84,6 +92,23 @@ export async function listRuns(status) {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   const response = await request(`/runs?${params.toString()}`);
+  return response.json();
+}
+
+export async function listBatches(status) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  const response = await request(`/batches?${params.toString()}`);
+  return response.json();
+}
+
+export async function fetchBatchStatus(batchId) {
+  const response = await request(`/batches/${batchId}/status`);
+  return response.json();
+}
+
+export async function fetchBatchResults(batchId) {
+  const response = await request(`/batches/${batchId}/results`);
   return response.json();
 }
 

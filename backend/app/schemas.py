@@ -66,6 +66,66 @@ class RunStatusResponse(BaseModel):
     running: List[str]
 
 
+class BatchCreate(BaseModel):
+    name: Optional[str] = None
+    protein_ids: List[str]
+    preset: str
+    options: Optional[dict[str, Any]] = None
+    format: Optional[str] = None
+    text: Optional[str] = None
+    ligands: Optional[List[LigandCreate]] = None
+
+
+class BatchCreateResponse(BaseModel):
+    batch_id: str
+    run_count: int
+    ligand_count: int
+
+
+class BatchSummary(BaseModel):
+    id: str
+    created_at: datetime
+    name: Optional[str] = None
+    preset: str
+    status: str
+    total_runs: int
+    done_runs: int
+    failed_runs: int
+    total_tasks: int
+    done_tasks: int
+    failed_tasks: int
+
+
+class BatchStatusResponse(BaseModel):
+    status: str
+    total_runs: int
+    done_runs: int
+    failed_runs: int
+    total_tasks: int
+    done_tasks: int
+    failed_tasks: int
+
+
+class BatchRunEntry(BaseModel):
+    run_id: str
+    ligand_id: str
+    ligand_name: Optional[str] = None
+    best_score: Optional[float] = None
+    best_protein: Optional[str] = None
+    status: str
+    total_tasks: int
+    done_tasks: int
+    failed_tasks: int
+
+
+class BatchResultsResponse(BaseModel):
+    batch_id: str
+    name: Optional[str] = None
+    preset: str
+    status: BatchStatusResponse
+    runs: List[BatchRunEntry]
+
+
 class RunResultEntry(BaseModel):
     protein_id: str
     protein_name: str

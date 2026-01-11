@@ -164,7 +164,15 @@ function formatVector(values) {
 export default function ResultsPage() {
   const params = useParams();
   const navigate = useNavigate();
-  const { runId: contextRunId, setLigandId, setSelectedProteins, setRunId } = useContext(RunContext);
+  const {
+    runId: contextRunId,
+    setLigandId,
+    setSelectedProteins,
+    setRunId,
+    setBatchId,
+    setBatchInput,
+    setInputMode
+  } = useContext(RunContext);
   const runId = params.runId || contextRunId;
   const [status, setStatus] = useState(null);
   const [results, setResults] = useState({ ranking: [], per_protein: [] });
@@ -180,6 +188,9 @@ export default function ResultsPage() {
     setLigandId(null);
     setSelectedProteins([]);
     setRunId(null);
+    setBatchId(null);
+    setBatchInput({ name: "", format: "csv", text: "" });
+    setInputMode("single");
     navigate("/");
   };
 

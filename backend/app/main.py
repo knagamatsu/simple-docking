@@ -20,8 +20,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import create_engine_from_settings, create_session_factory
-from app.models import Base, Ligand, LigandConformer, Protein, Result, Run, Task
+from app.models import Base, Batch, Ligand, LigandConformer, Protein, Result, Run, Task
 from app.schemas import (
+    BatchCreate,
+    BatchCreateResponse,
+    BatchResultsResponse,
+    BatchRunEntry,
+    BatchStatusResponse,
+    BatchSummary,
     LigandCreate,
     LigandCreateResponse,
     LigandOut,
@@ -51,7 +57,220 @@ PRESETS = {
 }
 CUSTOM_CATEGORY = "Custom"
 MAX_PDB_CHARS = 2_000_000
+MAX_SMILES_CHARS = 1000
+MAX_MOLFILE_CHARS = 100_000
 PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
+CSV_SMILES_HEADERS = {"smiles", "smile"}
+CSV_NAME_HEADERS = {"name", "compound", "id", "identifier", "title"}
+
+
+def safe_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def validate_ligand_input(smiles: str | None, molfile: str | None) -> None:
+    if not smiles and not molfile:
+        raise HTTPException(status_code=400, detail="smiles or molfile is required")
+    if smiles and len(smiles) > MAX_SMILES_CHARS:
+        raise HTTPException(status_code=400, detail="SMILES too long (max 1000 characters)")
+    if molfile and len(molfile) > MAX_MOLFILE_CHARS:
+        raise HTTPException(status_code=400, detail="Molfile too large (max 100KB)")
+
+
+def parse_csv_ligands(csv_text: str) -> list[LigandCreate]:
+    if csv_text is None:
+        raise ValueError("CSV text is required")
+    reader = csv.DictReader(io.StringIO(csv_text))
+    if not reader.fieldnames:
+        raise ValueError("CSV must include a header row")
+
+    field_map = {name.lower().strip(): name for name in reader.fieldnames if name}
+    smiles_key = next((field_map[key] for key in CSV_SMILES_HEADERS if key in field_map), None)
+    if not smiles_key:
+        raise ValueError("CSV must include a smiles column")
+
+    name_key = next((field_map[key] for key in CSV_NAME_HEADERS if key in field_map), None)
+    ligands: list[LigandCreate] = []
+
+    for idx, row in enumerate(reader, start=1):
+        if row is None:
+            continue
+        smiles = (row.get(smiles_key) or "").strip()
+        if not smiles:
+            if any((value or "").strip() for value in row.values() if isinstance(value, str)):
+                raise ValueError(f"Row {idx} is missing SMILES")
+            continue
+        name = (row.get(name_key) or "").strip() if name_key else ""
+        ligands.append(LigandCreate(name=name or None, smiles=smiles))
+
+    if not ligands:
+        raise ValueError("No ligands found in CSV")
+    return ligands
+
+
+def extract_sdf_name(lines: list[str]) -> str | None:
+    if not lines:
+        return None
+    title = lines[0].strip()
+    property_names = {"name", "title", "compound", "id", "identifier"}
+    for idx, line in enumerate(lines):
+        match = re.match(r"^>\s*<([^>]+)>", line)
+        if not match:
+            continue
+        prop = match.group(1).strip().lower()
+        if prop not in property_names:
+            continue
+        value_lines: list[str] = []
+        for value_line in lines[idx + 1 :]:
+            if not value_line.strip():
+                break
+            value_lines.append(value_line.strip())
+        if value_lines:
+            return " ".join(value_lines)
+    return title or None
+
+
+def parse_sdf_ligands(sdf_text: str) -> list[LigandCreate]:
+    if sdf_text is None:
+        raise ValueError("SDF text is required")
+    cleaned = sdf_text.replace("\r\n", "\n").replace("\r", "\n")
+    blocks = []
+    for block in cleaned.split("$$$$"):
+        trimmed = block.strip("\n")
+        if not trimmed.strip():
+            continue
+        blocks.append(trimmed.rstrip() + "\n")
+
+    if not blocks:
+        raise ValueError("No ligands found in SDF")
+
+    ligands: list[LigandCreate] = []
+    for block in blocks:
+        if len(block) > MAX_MOLFILE_CHARS:
+            raise ValueError("Molfile too large (max 100KB)")
+        lines = block.splitlines()
+        name = extract_sdf_name(lines)
+        ligands.append(LigandCreate(name=name or None, molfile=block))
+    return ligands
+
+
+def resolve_batch_ligands(payload: BatchCreate) -> list[LigandCreate]:
+    if payload.ligands:
+        return payload.ligands
+    if payload.format and payload.text:
+        fmt = payload.format.lower()
+        if fmt == "csv":
+            return parse_csv_ligands(payload.text)
+        if fmt == "sdf":
+            return parse_sdf_ligands(payload.text)
+        raise ValueError("Unsupported batch format")
+    raise ValueError("Batch input is required")
+
+
+def resolve_run_options(preset: str, options: dict[str, object] | None) -> dict[str, object]:
+    preset_key = preset.lower()
+    preset_config = PRESETS.get(preset_key)
+    if not preset_config:
+        raise HTTPException(status_code=400, detail="Unknown preset")
+    run_options = {**preset_config}
+    if options:
+        run_options.update(options)
+    return run_options
+
+
+def ensure_conformers(
+    session: Session,
+    ligand: Ligand,
+    run_options: dict[str, object],
+    default_conformers: int,
+) -> list[LigandConformer]:
+    existing_conformers = session.execute(
+        select(LigandConformer).where(LigandConformer.ligand_id == ligand.id)
+    ).scalars().all()
+    conformers = list(existing_conformers)
+
+    required = safe_int(run_options.get("num_conformers"), default_conformers)
+    if len(conformers) < required:
+        start_idx = len(conformers)
+        for idx in range(start_idx, required):
+            conformer = LigandConformer(ligand_id=ligand.id, idx=idx)
+            session.add(conformer)
+            conformers.append(conformer)
+    return conformers
+
+
+def create_run_tasks(
+    session: Session,
+    ligand: Ligand,
+    proteins: list[Protein],
+    preset: str,
+    run_options: dict[str, object],
+    batch_id: str | None = None,
+) -> tuple[Run, list[Task]]:
+    preset_config = PRESETS.get(preset.lower())
+    if not preset_config:
+        raise HTTPException(status_code=400, detail="Unknown preset")
+    conformers = ensure_conformers(session, ligand, run_options, preset_config["num_conformers"])
+
+    run = Run(
+        ligand_id=ligand.id,
+        batch_id=batch_id,
+        preset=preset,
+        options_json=run_options,
+        status="PENDING",
+    )
+    session.add(run)
+    session.flush()
+
+    tasks: list[Task] = []
+    for protein in proteins:
+        for conformer in conformers:
+            task = Task(
+                run_id=run.id,
+                protein_id=protein.id,
+                conformer_id=conformer.id,
+                status="PENDING",
+                attempts=0,
+            )
+            session.add(task)
+            tasks.append(task)
+
+    run.total_tasks = len(tasks)
+    return run, tasks
+
+
+def summarize_runs(runs: list[Run]) -> dict[str, int | str]:
+    total_runs = len(runs)
+    done_runs = len([run for run in runs if run.status == "SUCCEEDED"])
+    failed_runs = len([run for run in runs if run.status == "FAILED"])
+    running_runs = len([run for run in runs if run.status == "RUNNING"])
+    total_tasks = sum(run.total_tasks for run in runs)
+    done_tasks = sum(run.done_tasks for run in runs)
+    failed_tasks = sum(run.failed_tasks for run in runs)
+
+    if total_runs == 0:
+        status = "PENDING"
+    elif done_runs == total_runs:
+        status = "SUCCEEDED"
+    elif failed_runs > 0 and done_runs + failed_runs == total_runs:
+        status = "FAILED"
+    elif running_runs > 0:
+        status = "RUNNING"
+    else:
+        status = "PENDING"
+
+    return {
+        "status": status,
+        "total_runs": total_runs,
+        "done_runs": done_runs,
+        "failed_runs": failed_runs,
+        "total_tasks": total_tasks,
+        "done_tasks": done_tasks,
+        "failed_tasks": failed_tasks,
+    }
 
 
 def normalize_pdb_text(pdb_text: str) -> str:
@@ -176,14 +395,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/ligands", response_model=LigandCreateResponse)
     @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
     def create_ligand(request: Request, payload: LigandCreate, session: Session = Depends(get_session)):
-        if not payload.smiles and not payload.molfile:
-            raise HTTPException(status_code=400, detail="smiles or molfile is required")
-
-        # Basic validation
-        if payload.smiles and len(payload.smiles) > 1000:
-            raise HTTPException(status_code=400, detail="SMILES too long (max 1000 characters)")
-        if payload.molfile and len(payload.molfile) > 100000:
-            raise HTTPException(status_code=400, detail="Molfile too large (max 100KB)")
+        validate_ligand_input(payload.smiles, payload.molfile)
 
         try:
             ligand = Ligand(
@@ -340,6 +552,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "id": run.id,
                 "created_at": run.created_at,
                 "ligand_id": run.ligand_id,
+                "batch_id": run.batch_id,
                 "preset": run.preset,
                 "status": run.status,
                 "total_tasks": run.total_tasks,
@@ -364,60 +577,301 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if len(proteins) != len(payload.protein_ids):
             raise HTTPException(status_code=404, detail="Protein not found")
 
-        preset_key = payload.preset.lower()
-        preset = PRESETS.get(preset_key)
-        if not preset:
-            raise HTTPException(status_code=400, detail="Unknown preset")
+        run_options = resolve_run_options(payload.preset, payload.options)
 
-        run_options = {**preset}
-        if payload.options:
-            run_options.update(payload.options)
-
-        existing_conformers = session.execute(
-            select(LigandConformer).where(LigandConformer.ligand_id == ligand.id)
-        ).scalars().all()
-        conformers = list(existing_conformers)
-
-        try:
-            required = int(run_options.get("num_conformers", preset["num_conformers"]))
-        except (TypeError, ValueError):
-            required = preset["num_conformers"]
-        if len(conformers) < required:
-            start_idx = len(conformers)
-            for idx in range(start_idx, required):
-                conformer = LigandConformer(ligand_id=ligand.id, idx=idx)
-                session.add(conformer)
-                conformers.append(conformer)
-
-        run = Run(
-            ligand_id=ligand.id,
+        run, tasks = create_run_tasks(
+            session=session,
+            ligand=ligand,
+            proteins=proteins,
             preset=payload.preset,
-            options_json=run_options,
-            status="PENDING",
+            run_options=run_options,
         )
-        session.add(run)
-        session.flush()
-
-        tasks = []
-        for protein in proteins:
-            for conformer in conformers:
-                task = Task(
-                    run_id=run.id,
-                    protein_id=protein.id,
-                    conformer_id=conformer.id,
-                    status="PENDING",
-                    attempts=0,
-                )
-                session.add(task)
-                tasks.append(task)
-
-        run.total_tasks = len(tasks)
         session.commit()
 
         for task in tasks:
             enqueue_task(settings, task.id)
 
         return RunCreateResponse(run_id=run.id)
+
+    @app.get("/batches", response_model=List[BatchSummary])
+    def list_batches(
+        status: str | None = Query(default=None),
+        session: Session = Depends(get_session),
+    ):
+        batches = session.execute(select(Batch).order_by(Batch.created_at.desc())).scalars().all()
+        runs = session.execute(select(Run).where(Run.batch_id.isnot(None))).scalars().all()
+        runs_by_batch: dict[str, list[Run]] = {}
+        for run in runs:
+            if not run.batch_id:
+                continue
+            runs_by_batch.setdefault(run.batch_id, []).append(run)
+
+        summaries: list[BatchSummary] = []
+        for batch in batches:
+            stats = summarize_runs(runs_by_batch.get(batch.id, []))
+            if status and stats["status"] != status:
+                continue
+            summaries.append(
+                BatchSummary(
+                    id=batch.id,
+                    created_at=batch.created_at,
+                    name=batch.name,
+                    preset=batch.preset,
+                    status=stats["status"],
+                    total_runs=stats["total_runs"],
+                    done_runs=stats["done_runs"],
+                    failed_runs=stats["failed_runs"],
+                    total_tasks=stats["total_tasks"],
+                    done_tasks=stats["done_tasks"],
+                    failed_tasks=stats["failed_tasks"],
+                )
+            )
+        return summaries
+
+    @app.post("/batches", response_model=BatchCreateResponse)
+    @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
+    def create_batch(request: Request, payload: BatchCreate, session: Session = Depends(get_session)):
+        if not payload.protein_ids:
+            raise HTTPException(status_code=400, detail="protein_ids is required")
+
+        proteins = session.execute(
+            select(Protein).where(Protein.id.in_(payload.protein_ids))
+        ).scalars().all()
+        if len(proteins) != len(payload.protein_ids):
+            raise HTTPException(status_code=404, detail="Protein not found")
+
+        try:
+            ligand_inputs = resolve_batch_ligands(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        run_options = resolve_run_options(payload.preset, payload.options)
+        batch = Batch(name=payload.name, preset=payload.preset, options_json=run_options)
+        session.add(batch)
+        session.flush()
+
+        tasks: list[Task] = []
+        run_count = 0
+        for ligand_input in ligand_inputs:
+            validate_ligand_input(ligand_input.smiles, ligand_input.molfile)
+            ligand = Ligand(
+                name=ligand_input.name,
+                smiles=ligand_input.smiles,
+                molfile=ligand_input.molfile,
+                input_type="SMILES" if ligand_input.smiles else "MOLFILE",
+                status="READY",
+            )
+            session.add(ligand)
+            session.flush()
+
+            _, run_tasks = create_run_tasks(
+                session=session,
+                ligand=ligand,
+                proteins=proteins,
+                preset=payload.preset,
+                run_options=run_options,
+                batch_id=batch.id,
+            )
+            tasks.extend(run_tasks)
+            run_count += 1
+
+        session.commit()
+
+        for task in tasks:
+            enqueue_task(settings, task.id)
+
+        return BatchCreateResponse(
+            batch_id=batch.id,
+            run_count=run_count,
+            ligand_count=len(ligand_inputs),
+        )
+
+    @app.get("/batches/{batch_id}/status", response_model=BatchStatusResponse)
+    def get_batch_status(batch_id: str, session: Session = Depends(get_session)):
+        batch = session.get(Batch, batch_id)
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+
+        runs = session.execute(select(Run).where(Run.batch_id == batch.id)).scalars().all()
+        stats = summarize_runs(runs)
+        return BatchStatusResponse(**stats)
+
+    @app.get("/batches/{batch_id}/results", response_model=BatchResultsResponse)
+    def get_batch_results(batch_id: str, session: Session = Depends(get_session)):
+        batch = session.get(Batch, batch_id)
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+
+        runs = session.execute(select(Run).where(Run.batch_id == batch.id)).scalars().all()
+        run_ids = [run.id for run in runs]
+        tasks = session.execute(select(Task).where(Task.run_id.in_(run_ids))).scalars().all()
+        task_ids = [task.id for task in tasks]
+        results = session.execute(select(Result).where(Result.task_id.in_(task_ids))).scalars().all()
+
+        result_by_task = {result.task_id: result for result in results}
+        tasks_by_run: dict[str, list[Task]] = {}
+        for task in tasks:
+            tasks_by_run.setdefault(task.run_id, []).append(task)
+
+        proteins = {
+            protein.id: protein
+            for protein in session.execute(select(Protein)).scalars().all()
+        }
+        ligands = {
+            ligand.id: ligand
+            for ligand in session.execute(select(Ligand)).scalars().all()
+        }
+
+        run_entries: list[BatchRunEntry] = []
+        for run in runs:
+            best_score = None
+            best_protein = None
+            for task in tasks_by_run.get(run.id, []):
+                result = result_by_task.get(task.id)
+                if result and result.best_score is not None:
+                    if best_score is None or result.best_score < best_score:
+                        best_score = result.best_score
+                        protein = proteins.get(task.protein_id)
+                        best_protein = protein.name if protein else task.protein_id
+
+            ligand = ligands.get(run.ligand_id)
+            run_entries.append(
+                BatchRunEntry(
+                    run_id=run.id,
+                    ligand_id=run.ligand_id,
+                    ligand_name=ligand.name if ligand else None,
+                    best_score=best_score,
+                    best_protein=best_protein,
+                    status=run.status,
+                    total_tasks=run.total_tasks,
+                    done_tasks=run.done_tasks,
+                    failed_tasks=run.failed_tasks,
+                )
+            )
+
+        run_entries.sort(key=lambda item: (item.best_score is None, item.best_score or 0))
+        stats = summarize_runs(runs)
+
+        return BatchResultsResponse(
+            batch_id=batch.id,
+            name=batch.name,
+            preset=batch.preset,
+            status=BatchStatusResponse(**stats),
+            runs=run_entries,
+        )
+
+    @app.get("/batches/{batch_id}/export")
+    def export_batch(batch_id: str, fmt: str = Query(default="zip"), session: Session = Depends(get_session)):
+        batch = session.get(Batch, batch_id)
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+
+        runs = session.execute(select(Run).where(Run.batch_id == batch.id)).scalars().all()
+        run_ids = [run.id for run in runs]
+        tasks = session.execute(select(Task).where(Task.run_id.in_(run_ids))).scalars().all()
+        results = session.execute(select(Result).where(Result.task_id.in_([t.id for t in tasks]))).scalars().all()
+        result_by_task = {result.task_id: result for result in results}
+
+        proteins = {
+            protein.id: protein
+            for protein in session.execute(select(Protein)).scalars().all()
+        }
+        ligands = {
+            ligand.id: ligand
+            for ligand in session.execute(select(Ligand)).scalars().all()
+        }
+
+        if fmt == "csv":
+            lines = ["run_id,ligand_id,ligand_name,status,best_score,best_protein"]
+            tasks_by_run: dict[str, list[Task]] = {}
+            for task in tasks:
+                tasks_by_run.setdefault(task.run_id, []).append(task)
+
+            for run in runs:
+                best_score = None
+                best_protein = None
+                for task in tasks_by_run.get(run.id, []):
+                    result = result_by_task.get(task.id)
+                    if result and result.best_score is not None:
+                        if best_score is None or result.best_score < best_score:
+                            best_score = result.best_score
+                            protein = proteins.get(task.protein_id)
+                            best_protein = protein.name if protein else task.protein_id
+                ligand = ligands.get(run.ligand_id)
+                lines.append(
+                    f"{run.id},{run.ligand_id},{ligand.name if ligand else ''},{run.status},{best_score},{best_protein or ''}"
+                )
+            return PlainTextResponse("\n".join(lines), media_type="text/csv")
+
+        if fmt == "zip":
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                summary_lines = ["run_id,ligand_id,ligand_name,status,best_score,best_protein"]
+
+                tasks_by_run: dict[str, list[Task]] = {}
+                for task in tasks:
+                    tasks_by_run.setdefault(task.run_id, []).append(task)
+
+                for run in runs:
+                    ligand = ligands.get(run.ligand_id)
+                    ligand_name = ligand.name if ligand and ligand.name else run.ligand_id[:8]
+                    ligand_dir = ligand_name.replace(" ", "_")
+
+                    best_score = None
+                    best_protein = None
+                    for task in tasks_by_run.get(run.id, []):
+                        result = result_by_task.get(task.id)
+                        if result and result.best_score is not None:
+                            if best_score is None or result.best_score < best_score:
+                                best_score = result.best_score
+                                protein = proteins.get(task.protein_id)
+                                best_protein = protein.name if protein else task.protein_id
+
+                        pose_paths = result.pose_paths_json or [] if result else []
+                        protein = proteins.get(task.protein_id)
+                        protein_name_safe = (protein.name if protein else task.protein_id).replace(" ", "_")
+                        for idx, pose_path in enumerate(pose_paths, 1):
+                            abs_pose_path = Path(settings.object_store_path) / pose_path
+                            if abs_pose_path.exists():
+                                zip_file.write(
+                                    abs_pose_path,
+                                    arcname=f"{ligand_dir}/{protein_name_safe}/pose_{idx}.pdbqt",
+                                )
+
+                    summary_lines.append(
+                        f"{run.id},{run.ligand_id},{ligand.name if ligand else ''},{run.status},{best_score},{best_protein or ''}"
+                    )
+
+                    csv_buffer = io.StringIO()
+                    csv_writer = csv.DictWriter(
+                        csv_buffer, fieldnames=["protein_id", "protein_name", "best_score", "status", "pose_count"]
+                    )
+                    csv_writer.writeheader()
+
+                    for task in tasks_by_run.get(run.id, []):
+                        protein = proteins.get(task.protein_id)
+                        result = result_by_task.get(task.id)
+                        pose_paths = result.pose_paths_json or [] if result else []
+                        csv_writer.writerow({
+                            "protein_id": task.protein_id,
+                            "protein_name": protein.name if protein else task.protein_id,
+                            "best_score": result.best_score if result else None,
+                            "status": task.status,
+                            "pose_count": len(pose_paths),
+                        })
+
+                    zip_file.writestr(f"{ligand_dir}/summary.csv", csv_buffer.getvalue())
+
+                zip_file.writestr("batch_summary.csv", "\n".join(summary_lines))
+
+            zip_buffer.seek(0)
+            return StreamingResponse(
+                zip_buffer,
+                media_type="application/zip",
+                headers={"Content-Disposition": f"attachment; filename=batch_{batch_id}_results.zip"},
+            )
+
+        raise HTTPException(status_code=400, detail="Unsupported format")
 
     @app.get("/runs/{run_id}/status", response_model=RunStatusResponse)
     def get_run_status(run_id: str, session: Session = Depends(get_session)):

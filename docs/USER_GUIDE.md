@@ -31,6 +31,7 @@ Simple Docking Dashboard は、化合物（リガンド）とタンパク質（�
 #### 主な機能
 
 - ✅ **簡単な入力**: SMILES または Molfile 形式で化合物を入力
+- ✅ **バッチ処理**: CSV/SDF で複数リガンドを一括ドッキング
 - ✅ **タンパク質ライブラリ**: Kinase/GPCR/Protease/Nuclear receptor 計11件
 - ✅ **カスタムタンパク質**: PDB ID からの直接インポート / PDB テキスト貼り付け
 - ✅ **4ステップウィザード**: 入力 → ターゲット → 設定 → 結果
@@ -178,6 +179,11 @@ simple-docking-worker-1     Up
 3. **名前**: `Aspirin Test`
 4. 「**次へ**」をクリック
 
+**バッチ入力の場合**:
+1. 「**Batch**」を選択
+2. CSV（`name,smiles`）または SDF を貼り付け/アップロード
+3. 「**次へ**」をクリック
+
 ---
 
 ### ステップ4: ターゲット選択
@@ -214,6 +220,7 @@ simple-docking-worker-1     Up
 #### 画面構成
 
 - **ヘッダー**: アプリケーション名とナビゲーション
+- **Runs/Batches 切替**: 単体実行とバッチを切り替え
 - **フィルター**: ステータス別（All / Pending / Running / Succeeded / Failed）
 - **実行リスト**: 過去の計算結果
 - **新規実行ボタン**: 新しいドッキングを開始
@@ -233,6 +240,7 @@ simple-docking-worker-1     Up
 - **Status**: 実行状態（Pending / Running / Succeeded / Failed）
 - **Preset**: 使用した設定（Fast / Balanced / Thorough）
 - **Progress**: 完了タスク数 / 全タスク数
+- **Batch**: バッチの場合は Batch ID を表示
 
 ---
 
@@ -289,12 +297,39 @@ CN1C=NC2=C1C(=O)N(C(=O)N2C)C  ← カフェイン
 - **Chain**: 炭素鎖の追加
 - **Erase**: 削除
 
+##### 4. バッチ入力（CSV / SDF）
+
+**Batch とは**: 複数のリガンドをまとめて実行するモード
+
+**操作手順**:
+1. 画面右上の「**Batch**」を選択
+2. CSV または SDF を貼り付け/アップロード
+3. 「**次へ**」をクリック
+
+**CSV 形式（推奨）**:
+```
+name,smiles
+Ligand A,CCO
+Ligand B,CN
+```
+
+**SDF 形式**:
+- `$$$$` 区切りで複数ブロックを含む SDF を貼り付け
+- 各ブロックのタイトル行がリガンド名として表示されます
+
 #### フォームフィールド
 
 | フィールド | 必須 | 説明 |
 |-----------|------|------|
 | SMILES / Molfile | ✅ | どちらか一方を入力 |
 | 名前 | ❌ | わかりやすい名前（例: Aspirin Test） |
+
+#### バッチ用フィールド
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| Batch content | ✅ | CSV または SDF |
+| Batch name | ❌ | まとめた条件のラベル |
 
 ---
 
@@ -480,6 +515,33 @@ run_<run_id>_results.zip
 - [PyMOL](https://pymol.org/)
 - [Chimera](https://www.cgl.ucsf.edu/chimera/)
 - [AutoDockTools](http://autodock.scripps.edu/)
+
+---
+
+### バッチ結果画面
+
+![Batch Results Screenshot](./images/batch_results.png)
+<!-- TODO: スクリーンショット追加 -->
+
+#### 画面構成
+
+- **Batch 概要**: バッチ名、プリセット、完了数
+- **ランリスト**: リガンドごとのベストスコアと進捗
+- **Download ZIP**: バッチ全体の結果をまとめて取得
+
+#### バッチ ZIP の内容
+
+```
+batch_<batch_id>_results.zip
+├── batch_summary.csv     ← リガンド別サマリ
+├── Ligand_A/
+│   ├── summary.csv       ← ターゲット別スコア
+│   ├── EGFR/
+│   │   ├── pose_1.pdbqt
+│   │   └── ...
+│   └── ...
+└── ...
+```
 
 ---
 

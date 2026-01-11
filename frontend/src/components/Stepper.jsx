@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { RunContext } from "../App.jsx";
 
 export default function Stepper() {
-  const { ligandId, selectedProteins, runId } = useContext(RunContext);
+  const { ligandId, selectedProteins, runId, inputMode, batchInput, batchId } = useContext(RunContext);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -14,11 +14,22 @@ export default function Stepper() {
     return "Input";
   }, [location.pathname]);
 
+  const hasInput = inputMode === "batch" ? Boolean(batchInput?.text?.trim()) : Boolean(ligandId);
+  const hasResults = inputMode === "batch" ? Boolean(batchId) : Boolean(runId);
+  const resultsPath =
+    inputMode === "batch"
+      ? batchId
+        ? `/batch/${batchId}`
+        : "/batch"
+      : runId
+      ? `/results/${runId}`
+      : "/results";
+
   const steps = [
-    { label: "Input", done: Boolean(ligandId), path: "/" },
+    { label: "Input", done: hasInput, path: "/" },
     { label: "Targets", done: selectedProteins.length > 0, path: "/targets" },
-    { label: "Settings", done: Boolean(runId), path: "/settings" },
-    { label: "Results", done: false, path: runId ? `/results/${runId}` : "/results" }
+    { label: "Settings", done: hasResults, path: "/settings" },
+    { label: "Results", done: false, path: resultsPath }
   ];
 
   const handleStepClick = (step, index) => {

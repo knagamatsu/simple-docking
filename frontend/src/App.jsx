@@ -4,6 +4,7 @@ import InputPage from "./pages/InputPage.jsx";
 import TargetsPage from "./pages/TargetsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import ResultsPage from "./pages/ResultsPage.jsx";
+import BatchResultsPage from "./pages/BatchResultsPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import Stepper from "./components/Stepper.jsx";
 
@@ -14,6 +15,9 @@ export default function App() {
   const [selectedProteins, setSelectedProteins] = useState([]);
   const [preset, setPreset] = useState("Balanced");
   const [runId, setRunId] = useState(null);
+  const [inputMode, setInputMode] = useState("single");
+  const [batchInput, setBatchInput] = useState({ name: "", format: "csv", text: "" });
+  const [batchId, setBatchId] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -22,6 +26,9 @@ export default function App() {
     setSelectedProteins([]);
     setPreset("Balanced");
     setRunId(null);
+    setInputMode("single");
+    setBatchInput({ name: "", format: "csv", text: "" });
+    setBatchId(null);
     navigate("/");
   };
 
@@ -34,9 +41,15 @@ export default function App() {
       preset,
       setPreset,
       runId,
-      setRunId
+      setRunId,
+      inputMode,
+      setInputMode,
+      batchInput,
+      setBatchInput,
+      batchId,
+      setBatchId
     }),
-    [ligandId, selectedProteins, preset, runId]
+    [ligandId, selectedProteins, preset, runId, inputMode, batchInput, batchId]
   );
 
   return (
@@ -59,6 +72,7 @@ export default function App() {
             <Route path="/targets" element={<TargetsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/results/:runId?" element={<ResultsPage />} />
+            <Route path="/batch/:batchId?" element={<BatchResultsPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
           </Routes>
         </div>

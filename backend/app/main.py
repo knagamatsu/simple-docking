@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.db import create_engine_from_settings, create_session_factory
@@ -378,9 +378,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.session_factory = session_factory
 
+    def apply_schema_updates() -> None:
+        inspector = inspect(engine)
+        if inspector.has_table("runs"):
+            columns = {col["name"] for col in inspector.get_columns("runs")}
+            if "batch_id" not in columns:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE runs ADD COLUMN batch_id VARCHAR"))
+
     @app.on_event("startup")
     def on_startup():
         Base.metadata.create_all(engine)
+        apply_schema_updates()
         if settings.seed_proteins_on_startup:
             seed_proteins(engine, settings)
 

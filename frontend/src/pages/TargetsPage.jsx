@@ -51,6 +51,27 @@ export default function TargetsPage() {
         filter: (protein) => protein.category === "Kinase"
       },
       {
+        id: "gpcr",
+        label: "GPCR panel",
+        hint: "GPCR targets",
+        category: "GPCR",
+        filter: (protein) => protein.category === "GPCR"
+      },
+      {
+        id: "protease",
+        label: "Protease panel",
+        hint: "Protease targets",
+        category: "Protease",
+        filter: (protein) => protein.category === "Protease"
+      },
+      {
+        id: "nuclear",
+        label: "Nuclear receptor panel",
+        hint: "Nuclear receptor targets",
+        category: "Nuclear receptor",
+        filter: (protein) => protein.category === "Nuclear receptor"
+      },
+      {
         id: "oncology",
         label: "Oncology core",
         hint: "EGFR / ABL / Src / CDK2",

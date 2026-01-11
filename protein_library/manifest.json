@@ -103,5 +103,65 @@
       ]
     },
     "notes": "BCR-ABL fusion protein, leukemia target. Binding site from STI (Gleevec/Imatinib)"
+  },
+  {
+    "id": "prot_b2ar",
+    "name": "Beta-2 adrenergic receptor",
+    "category": "GPCR",
+    "organism": "Homo sapiens",
+    "source_id": "PDB:2RH1",
+    "receptor_pdbqt": "receptors/prot_b2ar/receptor.pdbqt",
+    "receptor_pdb": "receptors/prot_b2ar/2RH1.pdb",
+    "notes": "GPCR; carazolol-bound receptor"
+  },
+  {
+    "id": "prot_a2a",
+    "name": "A2A adenosine receptor",
+    "category": "GPCR",
+    "organism": "Homo sapiens",
+    "source_id": "PDB:3EML",
+    "receptor_pdbqt": "receptors/prot_a2a/receptor.pdbqt",
+    "receptor_pdb": "receptors/prot_a2a/3EML.pdb",
+    "notes": "GPCR; antagonist-bound receptor"
+  },
+  {
+    "id": "prot_hiv1_pr",
+    "name": "HIV-1 protease",
+    "category": "Protease",
+    "organism": "HIV-1",
+    "source_id": "PDB:1HVR",
+    "receptor_pdbqt": "receptors/prot_hiv1_pr/receptor.pdbqt",
+    "receptor_pdb": "receptors/prot_hiv1_pr/1HVR.pdb",
+    "notes": "Aspartyl protease; inhibitor-bound"
+  },
+  {
+    "id": "prot_mpro",
+    "name": "SARS-CoV-2 main protease",
+    "category": "Protease",
+    "organism": "SARS-CoV-2",
+    "source_id": "PDB:6LU7",
+    "receptor_pdbqt": "receptors/prot_mpro/receptor.pdbqt",
+    "receptor_pdb": "receptors/prot_mpro/6LU7.pdb",
+    "notes": "Viral protease; covalent inhibitor-bound"
+  },
+  {
+    "id": "prot_er_alpha",
+    "name": "Estrogen receptor alpha",
+    "category": "Nuclear receptor",
+    "organism": "Homo sapiens",
+    "source_id": "PDB:1A52",
+    "receptor_pdbqt": "receptors/prot_er_alpha/receptor.pdbqt",
+    "receptor_pdb": "receptors/prot_er_alpha/1A52.pdb",
+    "notes": "Nuclear receptor LBD; estradiol-bound"
+  },
+  {
+    "id": "prot_pparg",
+    "name": "PPAR-gamma",
+    "category": "Nuclear receptor",
+    "organism": "Homo sapiens",
+    "source_id": "PDB:2PRG",
+    "receptor_pdbqt": "receptors/prot_pparg/receptor.pdbqt",
+    "receptor_pdb": "receptors/prot_pparg/2PRG.pdb",
+    "notes": "Nuclear receptor; agonist-bound"
   }
 ]

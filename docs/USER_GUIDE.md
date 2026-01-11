@@ -31,7 +31,7 @@ Simple Docking Dashboard は、化合物（リガンド）とタンパク質（�
 #### 主な機能
 
 - ✅ **簡単な入力**: SMILES または Molfile 形式で化合物を入力
-- ✅ **キナーゼライブラリ**: 5つの実キナーゼ構造を搭載
+- ✅ **タンパク質ライブラリ**: Kinase/GPCR/Protease/Nuclear receptor 計11件
 - ✅ **カスタムタンパク質**: PDB ID からの直接インポート / PDB テキスト貼り付け
 - ✅ **4ステップウィザード**: 入力 → ターゲット → 設定 → 結果
 - ✅ **実計算**: AutoDock Vina による実際のドッキング計算
@@ -311,10 +311,34 @@ CN1C=NC2=C1C(=O)N(C(=O)N2C)C  ← カフェイン
 | **PKA** | 1ATP | Kinase | シグナル伝達、古典的キナーゼ例。ATP結合部位。 |
 | **ABL** | 1IEP | Kinase | 白血病標的（Gleevec/Imatinib）。阻害剤結合部位。 |
 
+#### GPCR ターゲット
+
+| タンパク質 | PDB ID | 分類 | 説明 |
+|-----------|--------|------|------|
+| **β2 Adrenergic receptor** | 2RH1 | GPCR | 交感神経系 GPCR。拮抗薬結合。 |
+| **A2A Adenosine receptor** | 3EML | GPCR | アデノシン受容体。拮抗薬結合。 |
+
+#### プロテアーゼターゲット
+
+| タンパク質 | PDB ID | 分類 | 説明 |
+|-----------|--------|------|------|
+| **HIV-1 Protease** | 1HVR | Protease | ウイルスプロテアーゼ。阻害剤結合。 |
+| **SARS-CoV-2 Mpro** | 6LU7 | Protease | ウイルス主プロテアーゼ。阻害剤結合。 |
+
+#### 核内受容体ターゲット
+
+| タンパク質 | PDB ID | 分類 | 説明 |
+|-----------|--------|------|------|
+| **Estrogen receptor alpha** | 1A52 | Nuclear receptor | ホルモン受容体。リガンド結合。 |
+| **PPAR-gamma** | 2PRG | Nuclear receptor | 代謝制御受容体。アゴニスト結合。 |
+
 #### プリセット
 
 - **All targets**: すべての登録ターゲットを一括選択
 - **Kinase panel**: Kinase カテゴリのみを選択（基準パネル）
+- **GPCR panel**: GPCR カテゴリのみを選択
+- **Protease panel**: Protease カテゴリのみを選択
+- **Nuclear receptor panel**: Nuclear receptor カテゴリのみを選択
 - **Oncology core**: EGFR / ABL / Src / CDK2 を一括選択
 - **Signal transduction**: EGFR / Src / PKA を一括選択
 - **Custom**: インポート／貼り付けで追加したターゲットのみを選択
@@ -737,9 +761,10 @@ docker compose logs worker | grep "run_id=123"
 
 **A**:
 
-現在のバージョン（MVP）では、プリセットの 5 つのキナーゼのみ対応しています。
+現在はプリセットの Kinase/GPCR/Protease/Nuclear receptor を搭載しています。
 
-将来のバージョンでカスタムタンパク質アップロード機能を追加予定（`docs/roadmap.md` 参照）。
+さらに、Target Library から PDB ID 直接インポート、または PDB テキスト貼り付けで
+カスタムタンパク質を追加できます。
 
 ---
 

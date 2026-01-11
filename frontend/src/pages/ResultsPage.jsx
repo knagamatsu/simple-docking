@@ -289,7 +289,11 @@ export default function ResultsPage() {
   );
 
   const poseScores = selectedResult?.metrics?.pose_scores || [];
-  const selectedPoseScore = poseScores[selectedPoseIndex];
+  const poseCount = viewerData.poses.length;
+  const hasPoses = poseCount > 0;
+  const hasMultiplePoses = poseCount > 1;
+  const safePoseIndex = hasPoses ? Math.min(Math.max(0, selectedPoseIndex), poseCount - 1) : 0;
+  const selectedPoseScore = poseScores[safePoseIndex];
 
   const completedTargets = results.per_protein.filter((item) => item.status === "SUCCEEDED").length;
   const failedTargets = results.per_protein.filter((item) => item.status === "FAILED").length;
@@ -437,7 +441,7 @@ export default function ResultsPage() {
                 <p className="muted">{selectedResult?.protein_name || "Select a target"}</p>
               </div>
               <div className="pose-controls">
-                {viewerData.poses.length > 1 && (
+                {hasMultiplePoses && (
                   <>
                     <button
                       type="button"
@@ -459,31 +463,35 @@ export default function ResultsPage() {
                   </>
                 )}
                 <button
-                  onClick={() => setSelectedPoseIndex((prev) => Math.max(0, prev - 1))}
-                  disabled={selectedPoseIndex === 0}
+                  onClick={() =>
+                    setSelectedPoseIndex((prev) => (hasPoses ? Math.max(0, prev - 1) : 0))
+                  }
+                  disabled={!hasPoses || safePoseIndex === 0}
                   className="ghost"
                 >
-                  ←
+                  ← Prev
                 </button>
                 <button
                   onClick={() =>
-                    setSelectedPoseIndex((prev) => Math.min(viewerData.poses.length - 1, prev + 1))
+                    setSelectedPoseIndex((prev) =>
+                      hasPoses ? Math.min(poseCount - 1, prev + 1) : 0
+                    )
                   }
-                  disabled={selectedPoseIndex === viewerData.poses.length - 1}
+                  disabled={!hasPoses || safePoseIndex === poseCount - 1}
                   className="ghost"
                 >
-                  →
+                  Next →
                 </button>
               </div>
             </div>
 
             <div className="chips pose-chip-row">
-              {viewerData.poses.length === 0 && <span className="muted">No poses available yet.</span>}
+              {!hasPoses && <span className="muted">No poses available yet.</span>}
               {viewerData.poses.map((_, idx) => (
                 <button
                   key={`pose-${idx}`}
                   type="button"
-                  className={selectedPoseIndex === idx ? "chip active" : "chip"}
+                  className={safePoseIndex === idx ? "chip active" : "chip"}
                   onClick={() => setSelectedPoseIndex(idx)}
                 >
                   Pose {idx + 1}{poseScores[idx] !== undefined ? ` (${formatScore(poseScores[idx])})` : ""}
@@ -493,10 +501,10 @@ export default function ResultsPage() {
 
             <Viewer
               receptorText={viewerData.receptor}
-              poseText={viewerData.poses[selectedPoseIndex] || ""}
+              poseText={viewerData.poses[safePoseIndex] || ""}
             />
             <div className="pose-meta">
-              <span>Pose {viewerData.poses.length ? selectedPoseIndex + 1 : 0}/{viewerData.poses.length}</span>
+              <span>Pose {hasPoses ? safePoseIndex + 1 : 0}/{poseCount}</span>
               <span>Score {formatScore(selectedPoseScore)}</span>
               <span>Contacts cutoff {contactCutoff}A</span>
             </div>

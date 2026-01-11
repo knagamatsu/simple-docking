@@ -818,7 +818,18 @@ textarea {
 
 .viewer-card .ghost {
   border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
   color: #e9eef5;
+}
+
+.viewer-card .ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pose-controls .ghost {
+  min-width: 92px;
+  text-align: center;
 }
 
 .viewer-card .chip {

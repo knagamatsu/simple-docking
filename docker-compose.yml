@@ -2,24 +2,38 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_DB: docking
-      POSTGRES_USER: docking
-      POSTGRES_PASSWORD: docking
+      POSTGRES_DB: ${POSTGRES_DB:-docking}
+      POSTGRES_USER: ${POSTGRES_USER:-docking}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docking}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     # Ports removed for security - only accessible via Docker network
+    # For development, uncomment the following line or set DEV_DB_PORT in .env
+    # ports:
+    #   - "${DEV_DB_PORT:-5432}:5432"
 
   broker:
     image: valkey/valkey:7
     # Ports removed for security - only accessible via Docker network
+    # For development, uncomment the following line or set DEV_REDIS_PORT in .env
+    # ports:
+    #   - "${DEV_REDIS_PORT:-6379}:6379"
 
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://docking:docking@db:5432/docking
-      BROKER_URL: redis://broker:6379/0
-      OBJECT_STORE_PATH: /data/object_store
-      PROTEIN_LIBRARY_PATH: /protein_library
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://docking:docking@db:5432/docking}
+      BROKER_URL: ${BROKER_URL:-redis://broker:6379/0}
+      OBJECT_STORE_PATH: ${OBJECT_STORE_PATH:-/data/object_store}
+      PROTEIN_LIBRARY_PATH: ${PROTEIN_LIBRARY_PATH:-/protein_library}
+      TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-300}
+      MAX_RETRIES: ${MAX_RETRIES:-2}
+      POCKET_METHOD_DEFAULT: ${POCKET_METHOD_DEFAULT:-auto}
+      POCKET_PADDING: ${POCKET_PADDING:-6.0}
+      POCKET_MIN_SIZE: ${POCKET_MIN_SIZE:-18.0}
+      POCKET_DEFAULT_SIZE: ${POCKET_DEFAULT_SIZE:-20.0}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8090,http://localhost:3000}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
     volumes:
       - ./data/object_store:/data/object_store
       - ./protein_library:/protein_library
@@ -27,14 +41,15 @@ services:
       - db
       - broker
 
-
   worker:
     build: ./worker
     environment:
-      DATABASE_URL: postgresql+psycopg://docking:docking@db:5432/docking
-      BROKER_URL: redis://broker:6379/0
-      OBJECT_STORE_PATH: /data/object_store
-      PROTEIN_LIBRARY_PATH: /protein_library
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://docking:docking@db:5432/docking}
+      BROKER_URL: ${BROKER_URL:-redis://broker:6379/0}
+      OBJECT_STORE_PATH: ${OBJECT_STORE_PATH:-/data/object_store}
+      PROTEIN_LIBRARY_PATH: ${PROTEIN_LIBRARY_PATH:-/protein_library}
+      TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-300}
+      MAX_RETRIES: ${MAX_RETRIES:-2}
     volumes:
       - ./data/object_store:/data/object_store
       - ./protein_library:/protein_library
@@ -45,15 +60,14 @@ services:
   frontend:
     build: ./frontend
     environment:
-      VITE_API_BASE: /simple-docking/api
-
+      VITE_API_BASE: ${VITE_API_BASE:-/simple-docking/api}
     depends_on:
       - api
 
   gateway:
     image: nginx:latest
     ports:
-      - "8090:80"
+      - "${EXTERNAL_PORT:-8090}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:

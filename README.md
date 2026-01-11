@@ -6,12 +6,19 @@
 
 ## 起動（Ubuntu）
 1. Docker / Docker Compose をインストール
-2. リポジトリを取得して起動
+2. リポジトリを取得
+3. 環境変数ファイルを作成（オプション）
+   ```bash
+   cp .env.example .env
+   # .env を編集してポート番号やパスワードを変更可能
+   ```
+4. 起動
    ```bash
    docker compose up --build
    ```
-3. ブラウザで UI を開く
+5. ブラウザで UI を開く
    - http://localhost:8090/simple-docking
+   - ポート番号は `.env` の `EXTERNAL_PORT` で変更可能
 
 On-prem and cloud demo deployment notes: `docs/deploy.md`.
 

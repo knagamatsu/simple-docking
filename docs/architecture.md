@@ -5,7 +5,7 @@ This repository is a monorepo for a docking-evaluation dashboard.
 ## Components
 - **gateway**: Nginx reverse proxy for unified external access (port 8090).
 - **frontend**: React UI for the 4-step flow and dashboard (Ketcher 2D editor for ligand input).
-- **backend**: FastAPI API for runs, tasks, ligands, and proteins.
+- **backend**: FastAPI API for runs, tasks, batches, ligands, and proteins.
 - **worker**: Celery worker that executes docking pipelines and writes results.
 - **broker**: Valkey/Redis for task queue.
 - **db**: PostgreSQL for metadata and state.
@@ -18,7 +18,7 @@ This repository is a monorepo for a docking-evaluation dashboard.
 4. Frontend polls run status and fetches results for visualization.
 
 ## Storage
-- DB: structured metadata for ligands/runs/tasks/results.
+- DB: structured metadata for ligands/runs/tasks/batches/results.
 - object_store: larger files (pdb/pose/logs).
 
 ## Configuration

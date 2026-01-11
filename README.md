@@ -76,14 +76,14 @@ uv run --extra test pytest
 - **処理フロー**:
   1. SMILES/Molfile → RDKitで3D構造生成
   2. MeekoでPDBQT形式に変換
-  3. Vinaでドッキング計算（exhaustiveness=8）
+  3. Vinaでドッキング計算（プリセットに応じて exhaustiveness / num_poses）
   4. 結果のスコア・ポーズを保存
 
 ## MVP版の制限事項
 現在の実装には以下の制限があります:
 - 認証・認可機能なし（誰でもアクセス可能）
 - タンパク質ライブラリは 11 件（Kinase/GPCR/Protease/Nuclear receptor）。PDB インポート/貼り付けで追加可能
-- 3D分子ビューワー未実装（結果はダウンロードして外部ツールで確認）
+ - 3DビューアとInteraction Mapは簡易表示（距離ベースの近接解析）
 - バッチ処理未対応（1リガンド×複数タンパク質のみ）
 
 本番運用には追加の実装が必要です。詳細は[AGENTS.md](AGENTS.md)を参照してください。

@@ -369,12 +369,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not preset:
             raise HTTPException(status_code=400, detail="Unknown preset")
 
+        run_options = {**preset}
+        if payload.options:
+            run_options.update(payload.options)
+
         existing_conformers = session.execute(
             select(LigandConformer).where(LigandConformer.ligand_id == ligand.id)
         ).scalars().all()
         conformers = list(existing_conformers)
 
-        required = preset["num_conformers"]
+        try:
+            required = int(run_options.get("num_conformers", preset["num_conformers"]))
+        except (TypeError, ValueError):
+            required = preset["num_conformers"]
         if len(conformers) < required:
             start_idx = len(conformers)
             for idx in range(start_idx, required):
@@ -385,7 +392,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run = Run(
             ligand_id=ligand.id,
             preset=payload.preset,
-            options_json=payload.options or {},
+            options_json=run_options,
             status="PENDING",
         )
         session.add(run)
@@ -472,6 +479,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             result = result_by_task.get(task.id)
             best_score = result.best_score if result else None
             pose_paths = result.pose_paths_json or [] if result else []
+            metrics = result.metrics_json if result else None
 
             entry = per_protein.setdefault(
                 task.protein_id,
@@ -484,6 +492,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "status_list": [],
                     "error_list": [],
                     "receptor_pdbqt_path": protein.receptor_pdbqt_path if protein else None,
+                    "metrics": None,
                 },
             )
             entry["status_list"].append(task.status)
@@ -495,6 +504,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ):
                 entry["best_score"] = best_score
                 entry["pose_paths"] = pose_paths
+                entry["metrics"] = metrics
 
         per_protein_list = []
         for entry in per_protein.values():

@@ -75,6 +75,7 @@ class RunResultEntry(BaseModel):
     status: str
     error: Optional[str] = None
     receptor_pdbqt_path: Optional[str] = None
+    metrics: Optional[dict[str, Any]] = None
 
 
 class RunResultsResponse(BaseModel):

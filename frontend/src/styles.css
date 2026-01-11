@@ -246,7 +246,7 @@ a {
   height: 380px;
 }
 
-.ketcher-host > div {
+.ketcher-host>div {
   height: 100%;
 }
 
@@ -658,11 +658,22 @@ textarea {
   flex-wrap: wrap;
 }
 
+.viewer-title {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+
+.viewer-title .muted {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .pose-controls {
   display: flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .pose-controls select {
@@ -817,9 +828,20 @@ textarea {
 }
 
 .viewer-card .ghost {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #e9eef5;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 16px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.viewer-card .ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.4);
+  border-color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .viewer-card .ghost:disabled {
@@ -932,6 +954,7 @@ textarea {
     opacity: 0;
     transform: translateY(14px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -943,6 +966,7 @@ textarea {
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

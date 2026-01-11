@@ -436,7 +436,7 @@ export default function ResultsPage() {
         <div>
           <div className="viewer-card">
             <div className="viewer-header">
-              <div>
+              <div className="viewer-title">
                 <h3 style={{ margin: 0 }}>Pose Viewer</h3>
                 <p className="muted">{selectedResult?.protein_name || "Select a target"}</p>
               </div>

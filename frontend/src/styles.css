@@ -656,6 +656,8 @@ textarea {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 2;
 }
 
 .viewer-title {
@@ -676,7 +678,14 @@ textarea {
   flex-shrink: 0;
 }
 
-.pose-controls select {
+.pose-playback {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pose-playback select {
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.1);
@@ -684,8 +693,14 @@ textarea {
   padding: 6px 10px;
 }
 
+.viewer-empty {
+  margin: 6px 0 0;
+}
+
 .pose-chip-row {
   margin-top: 10px;
+  position: relative;
+  z-index: 2;
 }
 
 .pose-meta {
@@ -828,19 +843,19 @@ textarea {
 }
 
 .viewer-card .ghost {
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.25);
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 14px;
-  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(233, 238, 245, 0.9);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 12px;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 
 .viewer-card .ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.4);
-  border-color: #ffffff;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.45);
   transform: translateY(-1px);
 }
 
@@ -850,8 +865,52 @@ textarea {
 }
 
 .pose-controls .ghost {
-  min-width: 92px;
+  min-width: 84px;
   text-align: center;
+}
+
+.viewer-options {
+  margin-top: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 8px 10px;
+}
+
+.viewer-options summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: rgba(233, 238, 245, 0.7);
+}
+
+.viewer-options summary::marker {
+  content: "";
+}
+
+.viewer-options summary::-webkit-details-marker {
+  display: none;
+}
+
+.viewer-options summary::before {
+  content: ">";
+  display: inline-block;
+  font-size: 12px;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+  color: rgba(233, 238, 245, 0.6);
+}
+
+.viewer-options[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.viewer-options-body {
+  margin-top: 8px;
+  display: grid;
+  gap: 10px;
 }
 
 .viewer-card .chip {
@@ -870,6 +929,8 @@ textarea {
   border-radius: 12px;
   overflow: hidden;
   margin: 12px 0;
+  position: relative;
+  z-index: 0;
 }
 
 .viewer-fallback {

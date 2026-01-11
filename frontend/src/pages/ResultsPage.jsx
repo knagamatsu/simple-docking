@@ -441,27 +441,6 @@ export default function ResultsPage() {
                 <p className="muted">{selectedResult?.protein_name || "Select a target"}</p>
               </div>
               <div className="pose-controls">
-                {hasMultiplePoses && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setAutoPlay((prev) => !prev)}
-                      className="ghost"
-                    >
-                      {autoPlay ? "Pause" : "Play"}
-                    </button>
-                    <select
-                      value={autoPlaySpeed}
-                      onChange={(event) => setAutoPlaySpeed(Number(event.target.value))}
-                    >
-                      {SPEED_OPTIONS.map((option) => (
-                        <option key={option.label} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </>
-                )}
                 <button
                   onClick={() =>
                     setSelectedPoseIndex((prev) => (hasPoses ? Math.max(0, prev - 1) : 0))
@@ -485,19 +464,7 @@ export default function ResultsPage() {
               </div>
             </div>
 
-            <div className="chips pose-chip-row">
-              {!hasPoses && <span className="muted">No poses available yet.</span>}
-              {viewerData.poses.map((_, idx) => (
-                <button
-                  key={`pose-${idx}`}
-                  type="button"
-                  className={safePoseIndex === idx ? "chip active" : "chip"}
-                  onClick={() => setSelectedPoseIndex(idx)}
-                >
-                  Pose {idx + 1}{poseScores[idx] !== undefined ? ` (${formatScore(poseScores[idx])})` : ""}
-                </button>
-              ))}
-            </div>
+            {!hasPoses && <p className="muted viewer-empty">No poses available yet.</p>}
 
             <Viewer
               receptorText={viewerData.receptor}
@@ -509,6 +476,47 @@ export default function ResultsPage() {
               <span>Contacts cutoff {contactCutoff}A</span>
             </div>
             <p className="muted">Click and drag to rotate. Scroll to zoom.</p>
+
+            {hasPoses && (
+              <details className="viewer-options">
+                <summary>Playback &amp; Poses</summary>
+                <div className="viewer-options-body">
+                  {hasMultiplePoses && (
+                    <div className="pose-playback">
+                      <button
+                        type="button"
+                        onClick={() => setAutoPlay((prev) => !prev)}
+                        className="ghost"
+                      >
+                        {autoPlay ? "Pause" : "Play"}
+                      </button>
+                      <select
+                        value={autoPlaySpeed}
+                        onChange={(event) => setAutoPlaySpeed(Number(event.target.value))}
+                      >
+                        {SPEED_OPTIONS.map((option) => (
+                          <option key={option.label} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="chips pose-chip-row">
+                    {viewerData.poses.map((_, idx) => (
+                      <button
+                        key={`pose-${idx}`}
+                        type="button"
+                        className={safePoseIndex === idx ? "chip active" : "chip"}
+                        onClick={() => setSelectedPoseIndex(idx)}
+                      >
+                        Pose {idx + 1}{poseScores[idx] !== undefined ? ` (${formatScore(poseScores[idx])})` : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
           </div>
 
           <div className="detail-grid">

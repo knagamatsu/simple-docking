@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { RunContext } from "../App.jsx";
-import { fetchFile, fetchProteinFile, fetchRunResults, fetchRunStatus } from "../api.js";
+import { fetchFile, fetchProteinFile, fetchRunResults, fetchRunStatus, listRuns } from "../api.js";
 import Viewer from "../components/Viewer.jsx";
 
 const CONTACT_CUTOFFS = [3.5, 4.0, 5.0];
@@ -112,45 +112,6 @@ function computeInteractionSummary(ligAtoms, recAtoms, cutoff) {
   };
 }
 
-function buildHistogram(scores, binCount = 8) {
-  if (!scores.length) return { bins: [], min: 0, max: 0 };
-  const min = Math.min(...scores);
-  const max = Math.max(...scores);
-  if (min === max) {
-    return {
-      bins: [{ min, max, count: scores.length }],
-      min,
-      max
-    };
-  }
-  const step = (max - min) / binCount;
-  const bins = Array.from({ length: binCount }, (_, idx) => ({
-    min: min + step * idx,
-    max: min + step * (idx + 1),
-    count: 0
-  }));
-  for (const score of scores) {
-    const idx = Math.min(binCount - 1, Math.floor((score - min) / step));
-    bins[idx].count += 1;
-  }
-  return { bins, min, max };
-}
-
-function computeScoreStats(scores) {
-  if (!scores.length) return null;
-  const sorted = [...scores].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-  const mean = sorted.reduce((sum, value) => sum + value, 0) / sorted.length;
-  return {
-    min: sorted[0],
-    max: sorted[sorted.length - 1],
-    median,
-    mean,
-    count: sorted.length
-  };
-}
-
 function formatScore(score) {
   if (score === null || score === undefined || Number.isNaN(score)) return "-";
   return score.toFixed(2);
@@ -159,6 +120,13 @@ function formatScore(score) {
 function formatVector(values) {
   if (!values || !values.length) return "-";
   return values.map((value) => value.toFixed(1)).join(", ");
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toISOString().slice(0, 10);
 }
 
 export default function ResultsPage() {
@@ -183,6 +151,9 @@ export default function ResultsPage() {
   const [autoPlaySpeed, setAutoPlaySpeed] = useState(SPEED_OPTIONS[1].value);
   const [contactCutoff, setContactCutoff] = useState(CONTACT_CUTOFFS[1]);
   const [error, setError] = useState("");
+  const [historyRuns, setHistoryRuns] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
 
   const handleNewRun = () => {
     setLigandId(null);
@@ -224,17 +195,22 @@ export default function ResultsPage() {
     };
   }, [runId]);
 
-  useEffect(() => {
-    if (!results.ranking.length) return;
-    if (!selectedProteinId || !results.ranking.some((item) => item.protein_id === selectedProteinId)) {
-      setSelectedProteinId(results.ranking[0].protein_id);
-    }
-  }, [results.ranking, selectedProteinId]);
+  const targetEntries = useMemo(() => {
+    const source = results.per_protein.length ? results.per_protein : results.ranking;
+    return [...source].sort((a, b) => a.protein_name.localeCompare(b.protein_name));
+  }, [results.per_protein, results.ranking]);
 
   const selectedResult = useMemo(() => {
-    if (!results.ranking.length) return null;
-    return results.ranking.find((item) => item.protein_id === selectedProteinId) || results.ranking[0];
-  }, [results.ranking, selectedProteinId]);
+    if (!targetEntries.length) return null;
+    return targetEntries.find((item) => item.protein_id === selectedProteinId) || targetEntries[0];
+  }, [targetEntries, selectedProteinId]);
+
+  useEffect(() => {
+    if (!targetEntries.length) return;
+    if (!selectedProteinId || !targetEntries.some((item) => item.protein_id === selectedProteinId)) {
+      setSelectedProteinId(targetEntries[0].protein_id);
+    }
+  }, [targetEntries, selectedProteinId]);
 
   useEffect(() => {
     if (!selectedResult) return;
@@ -268,15 +244,59 @@ export default function ResultsPage() {
     return () => clearInterval(interval);
   }, [autoPlay, autoPlaySpeed, viewerData.poses.length]);
 
-  const scoreValues = useMemo(
-    () => results.ranking.map((item) => item.best_score).filter((score) => Number.isFinite(score)),
-    [results.ranking]
-  );
-  const scoreStats = useMemo(() => computeScoreStats(scoreValues), [scoreValues]);
-  const scoreHistogram = useMemo(() => buildHistogram(scoreValues, 8), [scoreValues]);
-  const maxBinCount = Math.max(1, ...scoreHistogram.bins.map((bin) => bin.count));
-  const scoreAxisMin = scoreValues.length ? formatScore(scoreHistogram.min) : "-";
-  const scoreAxisMax = scoreValues.length ? formatScore(scoreHistogram.max) : "-";
+  useEffect(() => {
+    if (!runId || !selectedProteinId) return undefined;
+    let active = true;
+    setHistoryLoading(true);
+    setHistoryError("");
+
+    const loadHistory = async () => {
+      try {
+        const runs = await listRuns();
+        if (!active) return;
+        const sortedRuns = [...runs].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        const recentRuns = sortedRuns.filter((run) => run.id !== runId).slice(0, 8);
+        const historyResults = await Promise.all(
+          recentRuns.map(async (run) => {
+            try {
+              const res = await fetchRunResults(run.id);
+              return { run, res };
+            } catch (err) {
+              return null;
+            }
+          })
+        );
+        if (!active) return;
+        const entries = historyResults
+          .filter(Boolean)
+          .map(({ run, res }) => {
+            const match = res.per_protein.find((item) => item.protein_id === selectedProteinId);
+            if (!match || !Number.isFinite(match.best_score)) return null;
+            return {
+              runId: run.id,
+              createdAt: run.created_at,
+              status: run.status,
+              bestScore: match.best_score
+            };
+          })
+          .filter(Boolean);
+        setHistoryRuns(entries);
+      } catch (err) {
+        if (!active) return;
+        setHistoryError(err.message || "Failed to load history");
+        setHistoryRuns([]);
+      } finally {
+        if (active) setHistoryLoading(false);
+      }
+    };
+
+    loadHistory();
+    return () => {
+      active = false;
+    };
+  }, [runId, selectedProteinId]);
 
   const receptorAtoms = useMemo(() => parsePdbqtAtoms(viewerData.receptor), [viewerData.receptor]);
   const poseAtoms = useMemo(
@@ -295,8 +315,41 @@ export default function ResultsPage() {
   const safePoseIndex = hasPoses ? Math.min(Math.max(0, selectedPoseIndex), poseCount - 1) : 0;
   const selectedPoseScore = poseScores[safePoseIndex];
 
-  const completedTargets = results.per_protein.filter((item) => item.status === "SUCCEEDED").length;
-  const failedTargets = results.per_protein.filter((item) => item.status === "FAILED").length;
+  const currentBestScore = Number.isFinite(selectedResult?.best_score)
+    ? selectedResult.best_score
+    : null;
+  const historyRows = historyRuns.slice(0, 4);
+  const historyBestEntry = useMemo(() => {
+    const scored = historyRuns.filter((entry) => Number.isFinite(entry.bestScore));
+    if (!scored.length) return null;
+    return scored.reduce(
+      (best, entry) => (entry.bestScore < best.bestScore ? entry : best),
+      scored[0]
+    );
+  }, [historyRuns]);
+  const historyComparison = useMemo(() => {
+    if (!historyBestEntry || currentBestScore === null) return null;
+    const bestScore = historyBestEntry.bestScore;
+    const bestMagnitude = Math.abs(bestScore);
+    const currentMagnitude = Math.abs(currentBestScore);
+    const maxMagnitude = Math.max(bestMagnitude, currentMagnitude);
+    const divisor = maxMagnitude || 1;
+    const bestPercent = maxMagnitude ? (bestMagnitude / divisor) * 100 : 100;
+    const currentPercent = maxMagnitude ? (currentMagnitude / divisor) * 100 : 100;
+    return {
+      bestScore,
+      bestPercent,
+      currentPercent,
+      delta: currentBestScore - bestScore
+    };
+  }, [historyBestEntry, currentBestScore]);
+  const historyDeltaClass = historyComparison
+    ? historyComparison.delta < 0
+      ? "good"
+      : "bad"
+    : "";
+  const showProgress =
+    status && status.status && status.status !== "SUCCEEDED" && status.status !== "FAILED";
 
   if (!runId) {
     return (
@@ -332,7 +385,7 @@ export default function ResultsPage() {
 
       {error && <div className="error">{error}</div>}
 
-      {status && (
+      {showProgress && (
         <div className="progress-card">
           <div>
             <p className="muted">Progress</p>
@@ -351,41 +404,69 @@ export default function ResultsPage() {
       )}
 
       <div className="results-overview">
-        <div className="overview-card">
-          <p className="muted">Top hit</p>
-          <h3>{results.ranking[0]?.protein_name || "-"}</h3>
-          <p>Best score: {formatScore(results.ranking[0]?.best_score)}</p>
-        </div>
-        <div className="overview-card">
-          <p className="muted">Targets</p>
-          <h3>{results.ranking.length}</h3>
-          <p>
-            Completed {completedTargets}/{results.ranking.length} · Failed {failedTargets}
-          </p>
-        </div>
-        <div className="overview-card">
-          <p className="muted">Score summary</p>
-          <h3>{scoreStats ? formatScore(scoreStats.median) : "-"}</h3>
-          <p>
-            Range {scoreStats ? `${formatScore(scoreStats.min)} to ${formatScore(scoreStats.max)}` : "-"}
-          </p>
-        </div>
-        <div className="overview-card score-card">
-          <p className="muted">Score distribution</p>
-          <div className="score-histogram">
-            {scoreHistogram.bins.map((bin, idx) => (
-              <div
-                key={`bin-${idx}`}
-                className="score-bar"
-                title={`${formatScore(bin.min)} to ${formatScore(bin.max)} (${bin.count})`}
-                style={{ height: `${(bin.count / maxBinCount) * 100}%` }}
-              />
-            ))}
+        <div className="overview-card history-card">
+          <div className="history-header">
+            <div>
+              <p className="muted">History (same target)</p>
+              <h3>Current vs recent best</h3>
+            </div>
           </div>
-          <div className="score-axis">
-            <span>{scoreAxisMin}</span>
-            <span>{scoreAxisMax}</span>
-          </div>
+          {historyLoading ? (
+            <p className="muted">Loading history...</p>
+          ) : historyError ? (
+            <p className="error">{historyError}</p>
+          ) : currentBestScore === null ? (
+            <p className="muted">No score yet for this target.</p>
+          ) : !historyBestEntry ? (
+            <p className="muted">No previous runs for this target yet.</p>
+          ) : (
+            <>
+              <div className="history-bars">
+                <div className="history-bar-row">
+                  <span className="history-bar-label">Recent best</span>
+                  <div className="history-bar-track">
+                    <span
+                      className="history-bar-fill"
+                      style={{ width: `${historyComparison.bestPercent}%` }}
+                    />
+                  </div>
+                  <span className="history-bar-value">{formatScore(historyComparison.bestScore)}</span>
+                </div>
+                <div className="history-bar-row">
+                  <span className="history-bar-label">Current</span>
+                  <div className="history-bar-track">
+                    <span
+                      className={`history-bar-fill current ${historyDeltaClass}`}
+                      style={{ width: `${historyComparison.currentPercent}%` }}
+                    />
+                  </div>
+                  <span className={`history-bar-value ${historyDeltaClass}`}>
+                    {formatScore(currentBestScore)}
+                  </span>
+                </div>
+                <p className="muted">Lower score is better.</p>
+              </div>
+              <details className="history-details">
+                <summary>Recent runs</summary>
+                <div className="history-list">
+                  {historyRows.map((entry) => (
+                    <button
+                      key={entry.runId}
+                      type="button"
+                      className="history-row"
+                      onClick={() => navigate(`/results/${entry.runId}`)}
+                    >
+                      <span className="history-meta">
+                        <span className="history-date">{formatDate(entry.createdAt)}</span>
+                        <span className="history-id">Run {entry.runId.slice(0, 8)}</span>
+                      </span>
+                      <span className="history-score">{formatScore(entry.bestScore)}</span>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            </>
+          )}
         </div>
       </div>
 
@@ -394,7 +475,7 @@ export default function ResultsPage() {
           <div className="target-list">
             <h3>Targets</h3>
             <div className="target-list-body">
-              {results.ranking.map((item) => (
+              {targetEntries.map((item) => (
                 <button
                   key={item.protein_id}
                   type="button"
@@ -408,7 +489,7 @@ export default function ResultsPage() {
                   <div>
                     <h4>{item.protein_name}</h4>
                     <p className="muted">
-                      Score {formatScore(item.best_score)} · Poses {item.pose_paths.length}
+                      Poses {item.pose_paths.length}
                     </p>
                   </div>
                   <span className={`pill ${item.status?.toLowerCase()}`}>{item.status}</span>

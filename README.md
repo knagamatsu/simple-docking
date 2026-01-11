@@ -3,6 +3,7 @@
 化学者向けの簡易ドッキング評価ダッシュボードです。入力 → 標的 → 設定 → 結果の4ステップで操作できます。
 
 **📖 ユーザーガイド**: 詳しい使い方は [docs/USER_GUIDE.md](docs/USER_GUIDE.md) を参照してください。
+**⚙️ 環境設定**: ポート番号やパスワードなどの設定は [docs/configuration.md](docs/configuration.md) を参照してください。
 
 ## 起動（Ubuntu）
 1. Docker / Docker Compose をインストール

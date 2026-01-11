@@ -447,6 +447,53 @@ textarea {
   margin: 20px 0;
 }
 
+.target-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.target-grid-compact::-webkit-scrollbar {
+  width: 8px;
+}
+
+.target-grid-compact::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: white;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.copy-button:hover {
+  background: rgba(46, 125, 106, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.copy-button.copied {
+  background: rgba(46, 125, 106, 0.16);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .card {
   border-radius: 16px;
   border: 1px solid var(--border);

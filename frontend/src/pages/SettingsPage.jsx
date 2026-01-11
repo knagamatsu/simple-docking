@@ -150,6 +150,7 @@ export default function SettingsPage() {
       {error && <div className="error">{error}</div>}
 
       <div className="actions">
+        <span></span>
         <button className="primary" type="button" onClick={handleRun} disabled={loading}>
           {loading ? "Launching..." : inputMode === "batch" ? "Run Batch Docking" : "Run Docking"}
         </button>

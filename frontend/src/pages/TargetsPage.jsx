@@ -7,7 +7,7 @@ export default function TargetsPage() {
   const navigate = useNavigate();
   const { selectedProteins, setSelectedProteins } = useContext(RunContext);
   const [proteins, setProteins] = useState([]);
-  const [activePreset, setActivePreset] = useState("");
+  const [activePreset, setActivePreset] = useState("recommended");
   const [category, setCategory] = useState("");
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -19,9 +19,18 @@ export default function TargetsPage() {
   const [pasteText, setPasteText] = useState("");
   const [importing, setImporting] = useState(false);
   const [pasting, setPasting] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
-    fetchProteins({}).then(setProteins).catch((err) => setError(err.message));
+    fetchProteins({}).then((data) => {
+      setProteins(data);
+      // Auto-select recommended targets on initial load for beginners
+      if (data.length > 0) {
+        const recommendedIds = ["prot_cdk2", "prot_egfr", "prot_pka"];
+        const validIds = recommendedIds.filter((id) => data.some((p) => p.id === id));
+        setSelectedProteins(validIds.length > 0 ? validIds : data.slice(0, 3).map((p) => p.id));
+      }
+    }).catch((err) => setError(err.message));
   }, []);
 
   const presets = useMemo(() => {
@@ -37,11 +46,11 @@ export default function TargetsPage() {
     };
     const presetDefs = [
       {
-        id: "all",
-        label: "All targets",
-        hint: "Full library",
+        id: "recommended",
+        label: "Recommended",
+        hint: "Best for initial screening (3 targets)",
         category: "",
-        filter: () => true
+        ids: ["prot_cdk2", "prot_egfr", "prot_pka"]
       },
       {
         id: "kinase",
@@ -70,6 +79,13 @@ export default function TargetsPage() {
         hint: "Nuclear receptor targets",
         category: "Nuclear receptor",
         filter: (protein) => protein.category === "Nuclear receptor"
+      },
+      {
+        id: "all",
+        label: "All targets",
+        hint: "Full library (may take longer)",
+        category: "",
+        filter: () => true
       },
       {
         id: "oncology",
@@ -186,113 +202,42 @@ export default function TargetsPage() {
     }
   };
 
+  // Split presets into main (for beginners) and advanced
+  const mainPresets = presets.filter((p) => ["recommended", "kinase", "gpcr", "protease", "nuclear"].includes(p.id));
+  const advancedPresets = presets.filter((p) => ["all", "oncology", "signaling", "custom"].includes(p.id));
+
   return (
     <section className="panel">
       <div className="panel-header">
         <div>
           <h2>2. Target Library</h2>
-          <p>Select a preset target set or fine-tune by category.</p>
+          <p>"Recommended" is best for quick evaluation. Expand for more options.</p>
         </div>
-        <div className="preset-switch">
-          {presets.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              className={activePreset === preset.id ? "preset-toggle active" : "preset-toggle"}
-              onClick={() => applyPreset(preset.id)}
-              title={preset.hint}
-            >
-              <span>{preset.label}</span>
-              <span className="badge">{preset.ids.length}</span>
-            </button>
-          ))}
-        </div>
+        <div className="hint">Selected: {selectedProteins.length} targets</div>
       </div>
 
-      <div className="filters">
-        <div className="chips">
-          {categories.map((item) => (
-            <button
-              key={item || "all"}
-              type="button"
-              className={category === item ? "chip active" : "chip"}
-              onClick={() => setCategory(item)}
-            >
-              {item || "All"}
-            </button>
-          ))}
-        </div>
-        <input
-          className="search"
-          placeholder="Search targets"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
+      {/* Main presets - visible by default */}
+      <div className="preset-switch" style={{ marginTop: "16px" }}>
+        {mainPresets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={activePreset === preset.id ? "preset-toggle active" : "preset-toggle"}
+            onClick={() => applyPreset(preset.id)}
+            title={preset.hint}
+          >
+            <span>{preset.label}</span>
+            <span className="badge">{preset.ids.length}</span>
+          </button>
+        ))}
       </div>
 
       {error && <div className="error">{error}</div>}
       {actionError && <div className="error">{actionError}</div>}
       {actionMessage && <div className="success">{actionMessage}</div>}
 
-      <div className="input-grid">
-        <div className="input-card">
-          <h3>Import from PDB</h3>
-          <p className="muted">Fetch a receptor directly from RCSB by ID.</p>
-          <label>
-            PDB ID
-            <input
-              value={pdbId}
-              onChange={(event) => setPdbId(event.target.value)}
-              placeholder="e.g. 1M17"
-            />
-          </label>
-          <label>
-            Name (optional)
-            <input
-              value={pdbName}
-              onChange={(event) => setPdbName(event.target.value)}
-              placeholder="Custom label"
-            />
-          </label>
-          <div className="form-actions">
-            <button type="button" className="button-secondary" onClick={handleImport} disabled={importing}>
-              {importing ? "Importing..." : "Import PDB"}
-            </button>
-            <span className="muted">Stored as a Custom target.</span>
-          </div>
-        </div>
-
-        <div className="input-card">
-          <h3>Paste PDB</h3>
-          <p className="muted">Paste a full PDB file to add it to the library.</p>
-          <label>
-            Name (optional)
-            <input
-              value={pasteName}
-              onChange={(event) => setPasteName(event.target.value)}
-              placeholder="Custom label"
-            />
-          </label>
-          <label>
-            PDB content
-            <textarea
-              className="pdb-textarea"
-              rows={6}
-              value={pasteText}
-              onChange={(event) => setPasteText(event.target.value)}
-              placeholder="Paste ATOM records here"
-            />
-          </label>
-          <div className="form-actions">
-            <button type="button" className="button-secondary" onClick={handlePaste} disabled={pasting}>
-              {pasting ? "Adding..." : "Add PDB"}
-            </button>
-            <span className="muted">Supports multi-chain receptors.</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="target-grid">
+      {/* Compact scrollable target grid */}
+      <div className="target-grid-compact">
         {filtered.map((protein) => (
           <button
             key={protein.id}
@@ -307,6 +252,116 @@ export default function TargetsPage() {
             <span className="pill">{protein.organism || "N/A"}</span>
           </button>
         ))}
+      </div>
+
+      {/* Advanced Options - collapsed by default */}
+      <div className="advanced">
+        <button type="button" className="ghost" onClick={() => setAdvancedOpen(!advancedOpen)}>
+          {advancedOpen ? "Hide" : "Show"} Advanced Options
+        </button>
+        {advancedOpen && (
+          <div className="advanced-body">
+            {/* Advanced presets */}
+            <div style={{ marginBottom: "16px" }}>
+              <p className="muted" style={{ marginBottom: "8px" }}>Additional presets:</p>
+              <div className="preset-switch">
+                {advancedPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={activePreset === preset.id ? "preset-toggle active" : "preset-toggle"}
+                    onClick={() => applyPreset(preset.id)}
+                    title={preset.hint}
+                  >
+                    <span>{preset.label}</span>
+                    <span className="badge">{preset.ids.length}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Category filter and search */}
+            <div className="filters" style={{ marginBottom: "16px" }}>
+              <div className="chips">
+                {categories.map((item) => (
+                  <button
+                    key={item || "all"}
+                    type="button"
+                    className={category === item ? "chip active" : "chip"}
+                    onClick={() => setCategory(item)}
+                  >
+                    {item || "All"}
+                  </button>
+                ))}
+              </div>
+              <input
+                className="search"
+                placeholder="Search targets"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+
+            {/* PDB Import/Paste */}
+            <div className="input-grid">
+              <div className="input-card">
+                <h3>Import from PDB</h3>
+                <p className="muted">Fetch a receptor directly from RCSB by ID.</p>
+                <label>
+                  PDB ID
+                  <input
+                    value={pdbId}
+                    onChange={(event) => setPdbId(event.target.value)}
+                    placeholder="e.g. 1M17"
+                  />
+                </label>
+                <label>
+                  Name (optional)
+                  <input
+                    value={pdbName}
+                    onChange={(event) => setPdbName(event.target.value)}
+                    placeholder="Custom label"
+                  />
+                </label>
+                <div className="form-actions">
+                  <button type="button" className="button-secondary" onClick={handleImport} disabled={importing}>
+                    {importing ? "Importing..." : "Import PDB"}
+                  </button>
+                  <span className="muted">Stored as a Custom target.</span>
+                </div>
+              </div>
+
+              <div className="input-card">
+                <h3>Paste PDB</h3>
+                <p className="muted">Paste a full PDB file to add it to the library.</p>
+                <label>
+                  Name (optional)
+                  <input
+                    value={pasteName}
+                    onChange={(event) => setPasteName(event.target.value)}
+                    placeholder="Custom label"
+                  />
+                </label>
+                <label>
+                  PDB content
+                  <textarea
+                    className="pdb-textarea"
+                    rows={6}
+                    value={pasteText}
+                    onChange={(event) => setPasteText(event.target.value)}
+                    placeholder="Paste ATOM records here"
+                  />
+                </label>
+                <div className="form-actions">
+                  <button type="button" className="button-secondary" onClick={handlePaste} disabled={pasting}>
+                    {pasting ? "Adding..." : "Add PDB"}
+                  </button>
+                  <span className="muted">Supports multi-chain receptors.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="actions">

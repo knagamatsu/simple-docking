@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { RunContext } from "../App.jsx";
 import { fetchFile, fetchProteinFile, fetchRunResults, fetchRunStatus, listRuns } from "../api.js";
 import Viewer from "../components/Viewer.jsx";
+import { CopyIcon, CheckIcon, DownloadIcon, PlusIcon } from "../components/Icons.jsx";
 
 const CONTACT_CUTOFFS = [3.5, 4.0, 5.0];
 const SPEED_OPTIONS = [
@@ -154,6 +155,7 @@ export default function ResultsPage() {
   const [historyRuns, setHistoryRuns] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const handleNewRun = () => {
     setLigandId(null);
@@ -168,6 +170,37 @@ export default function ResultsPage() {
   const handleDownload = () => {
     const apiBase = import.meta.env.VITE_API_BASE || "/api";
     window.location.href = `${apiBase}/runs/${runId}/export?fmt=zip`;
+  };
+
+  const generateReportTemplate = () => {
+    const ranking = results.ranking || [];
+    const top3 = ranking.slice(0, 3);
+    const preset = results.preset || "Balanced";
+    const smiles = results.ligand_smiles || "N/A";
+    const createdAt = status?.created_at ? formatDate(status.created_at) : formatDate(new Date().toISOString());
+
+    const template = `## ドッキングシミュレーション結果
+
+### 実行条件
+- 実行日時: ${createdAt}
+- Run ID: ${runId}
+- リガンド (SMILES): ${smiles}
+- プリセット: ${preset}
+- ターゲット数: ${results.per_protein?.length || 0}
+
+### 結果サマリー（上位3件）
+${top3.length > 0 ? top3.map((r, i) =>
+      `${i + 1}. ${r.protein_name}: ${formatScore(r.best_score)} kcal/mol`
+    ).join('\n') : '結果なし'}
+
+### 備考
+本結果は仮説生成のための参考値であり、実験的検証が必要です。
+スコアが低いほど結合親和性が高いことを示唆します。
+`;
+    navigator.clipboard.writeText(template).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   useEffect(() => {
@@ -223,8 +256,8 @@ export default function ResultsPage() {
 
         const poses = selectedResult.pose_paths
           ? await Promise.all(
-              selectedResult.pose_paths.map((path) => fetchFile(path).catch(() => ""))
-            )
+            selectedResult.pose_paths.map((path) => fetchFile(path).catch(() => ""))
+          )
           : [];
 
         setViewerData({ receptor, poses });
@@ -367,18 +400,25 @@ export default function ResultsPage() {
           <h2>4. Results</h2>
           <p className="muted">Docking scores are for hypothesis generation only.</p>
         </div>
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
           <div className="status-chip">Run {status?.status || "PENDING"}</div>
+          <button
+            onClick={generateReportTemplate}
+            className={copied ? "copy-button copied" : "copy-button"}
+            disabled={!results.ranking?.length}
+          >
+            {copied ? <><CheckIcon size={16} /> Copied</> : <><CopyIcon size={16} /> Copy Report</>}
+          </button>
           <button
             onClick={handleDownload}
             className="button-secondary"
             disabled={!status || status.status === "PENDING" || status.done === 0}
-            style={{ opacity: (!status || status.status === "PENDING" || status.done === 0) ? 0.5 : 1 }}
+            style={{ opacity: (!status || status.status === "PENDING" || status.done === 0) ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
-            Download ZIP
+            <DownloadIcon size={16} /> Download ZIP
           </button>
-          <button onClick={handleNewRun} className="button-secondary">
-            New Run
+          <button onClick={handleNewRun} className="button-secondary" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <PlusIcon size={16} /> New Run
           </button>
         </div>
       </div>

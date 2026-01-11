@@ -46,6 +46,22 @@ export async function fetchProteins({ category, q } = {}) {
   return response.json();
 }
 
+export async function importProteinFromPdb(payload) {
+  const response = await request("/proteins/import", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return response.json();
+}
+
+export async function pasteProtein(payload) {
+  const response = await request("/proteins/paste", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return response.json();
+}
+
 export async function createRun(payload) {
   const response = await request("/runs", {
     method: "POST",

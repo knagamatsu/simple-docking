@@ -33,6 +33,20 @@ class ProteinOut(BaseModel):
     source_id: Optional[str] = None
 
 
+class ProteinImportRequest(BaseModel):
+    pdb_id: str
+    name: Optional[str] = None
+    category: Optional[str] = None
+    organism: Optional[str] = None
+
+
+class ProteinPasteRequest(BaseModel):
+    name: Optional[str] = None
+    pdb_text: str
+    category: Optional[str] = None
+    organism: Optional[str] = None
+
+
 class RunCreate(BaseModel):
     ligand_id: str
     protein_ids: List[str]

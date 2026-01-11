@@ -34,3 +34,19 @@ POCKET_PADDING=6.0
 POCKET_MIN_SIZE=18.0
 POCKET_DEFAULT_SIZE=20.0
 ```
+
+## Custom protein imports
+You can add proteins at runtime via the API:
+
+- `POST /proteins/import`: Fetches a PDB by ID from RCSB.
+- `POST /proteins/paste`: Accepts pasted PDB text.
+
+Imported receptors are stored under `protein_library/custom/<protein_id>/` with:
+
+- `receptor.pdb` (original PDB text, used for pocket inference)
+- `receptor.pdbqt` (prepared receptor file for Vina)
+
+The backend stores `receptor_pdb` in `receptor_meta_json` so the worker can infer pockets
+automatically when `default_box` is not provided.
+PDBQT conversion keeps `ATOM` records and strips other hetero atoms, so ensure the
+receptor PDB contains protein `ATOM` records.

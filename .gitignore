@@ -15,6 +15,7 @@ dist/
 
 # Data
 /data/
+/protein_library/custom/
 
 # Logs
 *.log

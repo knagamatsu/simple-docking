@@ -44,6 +44,18 @@ PYTHONPATH=. python scripts/import_proteins.py
 ```
 Auto pocket (ligand/protein bbox) options are documented in `docs/protein_library.md`.
 
+## カスタムタンパク質の追加
+Target Library 画面から PDB を追加できます（追加分はカテゴリ `Custom`）。
+
+- **PDB ID からインポート**: 4文字の PDB ID を指定
+- **PDB テキスト貼り付け**: 手元の PDB ファイルをそのまま貼り付け
+- **プリセット**: All / Kinase panel / Oncology core / Signal transduction / Custom
+
+API で追加する場合は以下を利用してください。
+
+- `POST /proteins/import` `{ "pdb_id": "1M17", "name": "..." }`
+- `POST /proteins/paste` `{ "name": "...", "pdb_text": "ATOM ...\n" }`
+
 ## テスト
 ```bash
 cd backend
@@ -70,7 +82,7 @@ uv run --extra test pytest
 ## MVP版の制限事項
 現在の実装には以下の制限があります:
 - 認証・認可機能なし（誰でもアクセス可能）
-- タンパク質ライブラリがキナーゼ5件のみ（CDK2, EGFR, Src, PKA, ABL）
+- タンパク質ライブラリのデフォルトはキナーゼ5件のみ（CDK2, EGFR, Src, PKA, ABL）。PDB インポート/貼り付けで追加可能
 - 3D分子ビューワー未実装（結果はダウンロードして外部ツールで確認）
 - バッチ処理未対応（1リガンド×複数タンパク質のみ）
 

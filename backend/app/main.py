@@ -1,10 +1,14 @@
 from datetime import datetime
 from pathlib import Path
 from typing import List
-import logging
-import zipfile
-import io
+from uuid import uuid4
 import csv
+import io
+import logging
+import re
+import zipfile
+from urllib import request as urllib_request
+from urllib.error import HTTPError, URLError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +26,8 @@ from app.schemas import (
     LigandCreateResponse,
     LigandOut,
     ProteinOut,
+    ProteinImportRequest,
+    ProteinPasteRequest,
     RunCreate,
     RunCreateResponse,
     RunResultsResponse,
@@ -43,6 +49,89 @@ PRESETS = {
     "balanced": {"num_conformers": 15, "exhaustiveness": 8, "num_poses": 10},
     "thorough": {"num_conformers": 30, "exhaustiveness": 16, "num_poses": 20},
 }
+CUSTOM_CATEGORY = "Custom"
+MAX_PDB_CHARS = 2_000_000
+PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
+
+
+def normalize_pdb_text(pdb_text: str) -> str:
+    if pdb_text is None:
+        raise ValueError("PDB content is required")
+    cleaned = pdb_text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not cleaned:
+        raise ValueError("PDB content is empty")
+    if len(cleaned) > MAX_PDB_CHARS:
+        raise ValueError("PDB content is too large")
+    lines = cleaned.split("\n")
+    if not any(line[0:6].strip() == "ATOM" for line in lines):
+        raise ValueError("PDB must include ATOM records")
+    return "\n".join(lines) + "\n"
+
+
+def pdb_text_to_pdbqt(pdb_text: str) -> str:
+    lines = []
+    for line in pdb_text.splitlines():
+        record = line[0:6].strip()
+        if record == "ATOM":
+            lines.append(line)
+        elif record == "END":
+            lines.append("END")
+            break
+    if not lines:
+        raise ValueError("No ATOM records found for PDBQT conversion")
+    if lines[-1] != "END":
+        lines.append("END")
+    return "\n".join(lines) + "\n"
+
+
+def ensure_custom_protein_dir(settings: Settings, protein_id: str) -> Path:
+    base_dir = Path(settings.protein_library_path) / "custom" / protein_id
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
+
+
+def write_custom_protein_files(settings: Settings, protein_id: str, pdb_text: str) -> dict:
+    base_dir = ensure_custom_protein_dir(settings, protein_id)
+    pdb_path = base_dir / "receptor.pdb"
+    pdbqt_path = base_dir / "receptor.pdbqt"
+
+    pdb_path.write_text(pdb_text, encoding="utf-8")
+    pdbqt_text = pdb_text_to_pdbqt(pdb_text)
+    pdbqt_path.write_text(pdbqt_text, encoding="utf-8")
+
+    rel_base = Path("custom") / protein_id
+    return {
+        "receptor_pdb": str(rel_base / "receptor.pdb"),
+        "receptor_pdbqt": str(rel_base / "receptor.pdbqt"),
+    }
+
+
+def fetch_pdb_from_rcsb(pdb_id: str) -> str:
+    url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
+    try:
+        with urllib_request.urlopen(url, timeout=10) as response:
+            data = response.read()
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise ValueError("PDB ID not found") from exc
+        raise RuntimeError("Failed to fetch PDB from RCSB") from exc
+    except URLError as exc:
+        raise RuntimeError("Failed to reach RCSB") from exc
+
+    try:
+        return data.decode("utf-8", errors="ignore")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("Failed to decode PDB response") from exc
+
+
+def protein_to_out(protein: Protein) -> ProteinOut:
+    return ProteinOut(
+        id=protein.id,
+        name=protein.name,
+        category=protein.category,
+        organism=protein.organism,
+        source_id=protein.source_id,
+    )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -52,7 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # CORS middleware with configurable origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=settings.cors_origins_list(),
         allow_credentials=settings.cors_allow_credentials,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
@@ -140,16 +229,102 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if q:
             query = query.where(Protein.name.ilike(f"%{q}%"))
         proteins = session.execute(query).scalars().all()
-        return [
-            ProteinOut(
-                id=protein.id,
-                name=protein.name,
-                category=protein.category,
-                organism=protein.organism,
-                source_id=protein.source_id,
-            )
-            for protein in proteins
-        ]
+        return [protein_to_out(protein) for protein in proteins]
+
+    @app.post("/proteins/import", response_model=ProteinOut)
+    @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
+    def import_protein_from_pdb(
+        request: Request,
+        payload: ProteinImportRequest,
+        session: Session = Depends(get_session),
+    ):
+        pdb_id = (payload.pdb_id or "").strip().upper()
+        if not PDB_ID_RE.fullmatch(pdb_id):
+            raise HTTPException(status_code=400, detail="Invalid PDB ID")
+
+        source_id = f"PDB:{pdb_id}"
+        existing = session.execute(select(Protein).where(Protein.source_id == source_id)).scalar_one_or_none()
+        if existing:
+            return protein_to_out(existing)
+
+        try:
+            pdb_text_raw = fetch_pdb_from_rcsb(pdb_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        try:
+            pdb_text = normalize_pdb_text(pdb_text_raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        protein_id = f"pdb_{pdb_id.lower()}"
+        if session.get(Protein, protein_id):
+            protein_id = f"{protein_id}_{uuid4().hex[:6]}"
+
+        paths = write_custom_protein_files(settings, protein_id, pdb_text)
+        category = payload.category or CUSTOM_CATEGORY
+        name = payload.name or f"PDB {pdb_id}"
+        meta = {
+            "receptor_pdb": paths["receptor_pdb"],
+            "source": "rcsb",
+            "pdb_id": pdb_id,
+        }
+
+        protein = Protein(
+            id=protein_id,
+            name=name,
+            category=category,
+            organism=payload.organism,
+            source_id=source_id,
+            receptor_pdbqt_path=paths["receptor_pdbqt"],
+            receptor_meta_json=meta,
+            pocket_method="auto",
+            status="READY",
+        )
+        session.add(protein)
+        session.commit()
+        return protein_to_out(protein)
+
+    @app.post("/proteins/paste", response_model=ProteinOut)
+    @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
+    def paste_protein(
+        request: Request,
+        payload: ProteinPasteRequest,
+        session: Session = Depends(get_session),
+    ):
+        try:
+            pdb_text = normalize_pdb_text(payload.pdb_text)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        category = payload.category or CUSTOM_CATEGORY
+        protein_id = f"custom_{uuid4().hex[:8]}"
+        while session.get(Protein, protein_id):
+            protein_id = f"custom_{uuid4().hex[:8]}"
+
+        paths = write_custom_protein_files(settings, protein_id, pdb_text)
+        name = payload.name or f"Custom protein {protein_id[-4:]}"
+        meta = {
+            "receptor_pdb": paths["receptor_pdb"],
+            "source": "paste",
+        }
+
+        protein = Protein(
+            id=protein_id,
+            name=name,
+            category=category,
+            organism=payload.organism,
+            source_id="User upload",
+            receptor_pdbqt_path=paths["receptor_pdbqt"],
+            receptor_meta_json=meta,
+            pocket_method="auto",
+            status="READY",
+        )
+        session.add(protein)
+        session.commit()
+        return protein_to_out(protein)
 
     @app.get("/runs")
     def list_runs(

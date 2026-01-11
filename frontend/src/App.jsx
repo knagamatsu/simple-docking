@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import InputPage from "./pages/InputPage.jsx";
 import TargetsPage from "./pages/TargetsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
@@ -15,6 +15,15 @@ export default function App() {
   const [preset, setPreset] = useState("Balanced");
   const [runId, setRunId] = useState(null);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleHomeClick = () => {
+    setLigandId(null);
+    setSelectedProteins([]);
+    setPreset("Balanced");
+    setRunId(null);
+    navigate("/");
+  };
 
   const contextValue = useMemo(
     () => ({
@@ -34,7 +43,7 @@ export default function App() {
     <RunContext.Provider value={contextValue}>
       <div className="app-shell">
         <header className="app-header">
-          <div>
+          <div className="header-title" onClick={handleHomeClick}>
             <p className="eyebrow">Preset Target Docking</p>
             <h1>Docking Snapshot</h1>
             <p className="subtitle">Rapid hypothesis scouting for chemists.</p>

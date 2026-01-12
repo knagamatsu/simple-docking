@@ -44,12 +44,27 @@ PYTHONPATH=. python scripts/import_proteins.py
 ```
 Auto pocket (ligand/protein bbox) options are documented in `docs/protein_library.md`.
 
+## 画面操作（Navigation）
+- **共通ナビゲーション**: 画面下部の固定フッター（Back / Next）でステップ間の移動がスムーズに行えます。
+- **メイン画面へ戻る**: 画面右上の「Dashboard」リンクをクリックすると、過去の実行履歴一覧（ダッシュボード）に戻れます。
+- **新規実行**: ダッシュボードまたはルート（`/`）からウィザード形式で新しいドッキングを開始できます。
+- **バッチ実行**: Input で Batch を選択し、CSV/SDF をアップロードして複数リガンドを一括実行できます。
+
+## レポート機能（Reporting）
+Results画面では、シミュレーション結果のサマリーを簡単に共有できます。
+- **Copy Report**: 結果画面右上の「📋 Copy Report」ボタンから、実行条件と上位スコアを含むレポートをクリップボードにコピーできます。
+  - テキスト形式（チャットツール向け）とMarkdown形式（ドキュメント向け）を選択可能です。
+
 ## カスタムタンパク質の追加
 Target Library 画面から PDB を追加できます（追加分はカテゴリ `Custom`）。
 
 - **PDB ID からインポート**: 4文字の PDB ID を指定
 - **PDB テキスト貼り付け**: 手元の PDB ファイルをそのまま貼り付け
-- **プリセット**: All / Kinase panel / GPCR panel / Protease panel / Nuclear receptor panel / Oncology core / Signal transduction / Custom
+- **プリセット**:
+  - **Recommended**: 初心者向け推奨セット（CDK2, EGFR, PKA）※デフォルト
+  - **Panels**: Kinase / GPCR / Protease / Nuclear receptor
+  - **Advanced**: All targets / Custom / Oncology / Signaling
+    - "Advanced Options" を展開すると利用可能です。
 
 API で追加する場合は以下を利用してください。
 
@@ -62,12 +77,6 @@ cd backend
 uv run --extra test pytest
 ```
 
-## 補足
-
-## 画面操作（Navigation）
-- **メイン画面へ戻る**: 画面右上の「Dashboard」リンクをクリックすると、過去の実行履歴一覧（ダッシュボード）に戻れます。
-- **新規実行**: ダッシュボードまたはルート（`/`）からウィザード形式で新しいドッキングを開始できます。
-- **バッチ実行**: Input で Batch を選択し、CSV/SDF をアップロードして複数リガンドを一括実行できます。
 
 ## ドッキングロジック（Logic）
 **実際のAutoDock Vinaを使用した分子ドッキング計算**を実行しています。

@@ -188,8 +188,8 @@ simple-docking-worker-1     Up
 
 ### ステップ4: ターゲット選択
 
-1. **CDK2 (Cyclin-dependent kinase 2)** を選択
-2. 「**次へ**」をクリック
+1. デフォルトで **Recommended** (CDK2, EGFR, PKA) が選択されています。
+2. 必要に応じて変更し、「**次へ**」をクリック
 
 ---
 
@@ -371,6 +371,7 @@ Ligand B,CN
 
 #### プリセット
 
+- **Recommended**: 初心者向け推奨セット（CDK2, EGFR, PKA）
 - **All targets**: すべての登録ターゲットを一括選択
 - **Kinase panel**: Kinase カテゴリのみを選択（基準パネル）
 - **GPCR panel**: GPCR カテゴリのみを選択
@@ -493,7 +494,8 @@ Ligand B,CN
 
 | ボタン | 機能 |
 |--------|------|
-| **結果をダウンロード** | すべての結果を ZIP でダウンロード |
+| **Copy Report** | 結果サマリーをクリップボードにコピー（テキスト/Markdown） |
+| **Download ZIP** | すべての結果を ZIP でダウンロード |
 | **New Run** | 新しいドッキングを開始 |
 
 #### ダウンロードファイル

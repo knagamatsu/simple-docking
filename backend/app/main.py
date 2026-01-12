@@ -563,6 +563,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "ligand_id": run.ligand_id,
                 "batch_id": run.batch_id,
                 "preset": run.preset,
+                "options": run.options_json,
                 "status": run.status,
                 "total_tasks": run.total_tasks,
                 "done_tasks": run.done_tasks,

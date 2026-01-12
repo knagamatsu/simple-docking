@@ -49,8 +49,9 @@ Simple Docking Dashboard は、化合物（リガンド）とタンパク質（�
 
 #### システム要件
 
-- **OS**: Linux（Ubuntu、Fedora など）、macOS
+- **OS**: Linux（Ubuntu、Fedora など）、macOS、Windows（WSL2 + Docker Desktop）
 - **ソフトウェア**: Docker 20.10+、Docker Compose V2+
+- **Git**: 手動インストール時に必要（自動インストーラー利用時は不要）
 - **ブラウザ**: Chrome、Firefox、Safari など
 - **メモリ**: 4GB 以上推奨
 - **ディスク**: 5GB 以上の空き容量
@@ -99,12 +100,24 @@ sudo dnf install docker docker-compose
 **macOS**:
 - [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop) をインストール
 
+**Windows (WSL2)**:
+1. PowerShell（管理者）で WSL2 を有効化（未導入の場合）
+   ```powershell
+   wsl --install -d Ubuntu
+   ```
+2. Docker Desktop for Windows をインストールし、WSL2 エンジンと Ubuntu 連携を有効化
+3. Ubuntu (WSL2) で `docker version` と `docker compose version` を確認
+
 #### ステップ2: リポジトリの取得
 
 ```bash
 git clone https://github.com/knagamatsu/simple-docking.git
 cd simple-docking
 ```
+
+**Windows (WSL2) の注意**:
+- リポジトリは WSL2 側のホーム（例: `~/simple-docking`）に置くと高速です
+- `/mnt/c` 配下は I/O が遅くなることがあるため非推奨です
 
 #### ステップ3: 起動
 
@@ -121,6 +134,7 @@ docker compose up -d
 #### ステップ4: アクセス
 
 ブラウザで http://localhost:8090/simple-docking を開く
+（WSL2 の場合も Windows 側のブラウザで同じ URL にアクセスできます）
 
 ---
 
@@ -144,6 +158,19 @@ simple-docking-frontend-1   Up
 simple-docking-gateway-1    Up
 simple-docking-worker-1     Up
 ```
+
+### アップデート
+
+インストール済みの環境を最新にするには、リポジトリ更新後に再ビルドします。
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+- 既に起動中なら `./start.sh` を実行して再起動を選択しても OK
+- データは `./data/postgres` と `./data/object_store` に保存されるため、再ビルドや `docker compose down` だけでは消えません
+- `./data` を削除するとデータが消えるので注意
 
 ---
 

@@ -11,6 +11,7 @@
   "dependencies": {
     "ketcher-react": "3.10.0-build.2",
     "ketcher-standalone": "3.10.0-build.2",
+    "openchemlib": "^8.21.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "6.26.2"

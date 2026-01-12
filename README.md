@@ -7,17 +7,22 @@
 
 ## 起動（Ubuntu）
 1. Docker / Docker Compose をインストール
-2. リポジトリを取得
-3. 環境変数ファイルを作成（オプション）
+2. Git をインストール（`git clone` に必要）
+3. リポジトリを取得
+4. 環境変数ファイルを作成（オプション）
    ```bash
    cp .env.example .env
    # .env を編集してポート番号やパスワードを変更可能
    ```
-4. 起動
+5. 起動
    ```bash
-   docker compose up --build
+   ./start.sh
    ```
-5. ブラウザで UI を開く
+   もしくは（手動起動）
+   ```bash
+   docker compose up --build -d
+   ```
+6. ブラウザで UI を開く
    - http://localhost:8090/simple-docking
    - ポート番号は `.env` の `EXTERNAL_PORT` で変更可能
 

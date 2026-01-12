@@ -1,10 +1,19 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { RunContext } from "../App.jsx";
-import { fetchFile, fetchProteinFile, fetchRunResults, fetchRunStatus, listRuns } from "../api.js";
+import {
+  fetchFile,
+  fetchLigand,
+  fetchProteinFile,
+  fetchRunResults,
+  fetchRunStatus,
+  listRuns
+} from "../api.js";
 import Viewer from "../components/Viewer.jsx";
+import Structure2D from "../components/Structure2D.jsx";
 import { CopyIcon, CheckIcon, DownloadIcon, PlusIcon } from "../components/Icons.jsx";
 import Modal from "../components/Modal.jsx";
+import OCL from "openchemlib/full";
 
 const CONTACT_CUTOFFS = [3.5, 4.0, 5.0];
 const SPEED_OPTIONS = [
@@ -131,6 +140,30 @@ function formatDate(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function formatShortId(value) {
+  if (!value) return "-";
+  return String(value).slice(0, 8);
+}
+
+function stableStringify(value) {
+  if (value === null || value === undefined) return "null";
+  if (typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+}
+
+function formatRunOptions(options) {
+  if (!options) return "";
+  const parts = [];
+  if (Number.isFinite(options.num_poses)) parts.push(`Poses ${options.num_poses}`);
+  if (Number.isFinite(options.exhaustiveness)) parts.push(`Exhaustiveness ${options.exhaustiveness}`);
+  if (Number.isFinite(options.num_conformers)) parts.push(`Conformers ${options.num_conformers}`);
+  return parts.join(" · ");
+}
+
 export default function ResultsPage() {
   const params = useParams();
   const navigate = useNavigate();
@@ -156,10 +189,18 @@ export default function ResultsPage() {
   const [historyRuns, setHistoryRuns] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [currentRunMeta, setCurrentRunMeta] = useState(null);
   const [copied, setCopied] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportFormat, setReportFormat] = useState("markdown");
   const [reportContent, setReportContent] = useState("");
+  const [ligandModalOpen, setLigandModalOpen] = useState(false);
+  const [ligandModalEntry, setLigandModalEntry] = useState(null);
+  const [ligandInfo, setLigandInfo] = useState(null);
+  const [derivedSmiles, setDerivedSmiles] = useState("");
+  const [ligandLoading, setLigandLoading] = useState(false);
+  const [ligandError, setLigandError] = useState("");
+  const [ligandCopied, setLigandCopied] = useState(false);
 
   const handleNewRun = () => {
     setLigandId(null);
@@ -242,6 +283,28 @@ ${top3.length > 0 ? top3.map((r, i) =>
   const handleDownload = () => {
     const apiBase = import.meta.env.VITE_API_BASE || "/api";
     window.location.href = `${apiBase}/runs/${runId}/export?fmt=zip`;
+  };
+
+  const handleOpenLigandModal = (entry) => {
+    setLigandModalEntry(entry);
+    setLigandModalOpen(true);
+  };
+
+  const handleCloseLigandModal = () => {
+    setLigandModalOpen(false);
+    setLigandModalEntry(null);
+    setLigandInfo(null);
+    setDerivedSmiles("");
+    setLigandError("");
+    setLigandCopied(false);
+  };
+
+  const handleCopyLigandText = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setLigandCopied(true);
+      setTimeout(() => setLigandCopied(false), 1000);
+    });
   };
 
   useEffect(() => {
@@ -328,10 +391,27 @@ ${top3.length > 0 ? top3.map((r, i) =>
       try {
         const runs = await listRuns();
         if (!active) return;
+        const currentRun = runs.find((run) => run.id === runId) || null;
+        if (active) setCurrentRunMeta(currentRun);
+        const signature = currentRun
+          ? {
+            preset: currentRun.preset,
+            optionsKey: stableStringify(currentRun.options || {})
+          }
+          : null;
         const sortedRuns = [...runs].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
-        const recentRuns = sortedRuns.filter((run) => run.id !== runId).slice(0, 8);
+        const recentRuns = sortedRuns
+          .filter((run) => run.id !== runId)
+          .filter((run) => {
+            if (!signature) return false;
+            return (
+              run.preset === signature.preset &&
+              stableStringify(run.options || {}) === signature.optionsKey
+            );
+          })
+          .slice(0, 8);
         const historyResults = await Promise.all(
           recentRuns.map(async (run) => {
             try {
@@ -352,7 +432,8 @@ ${top3.length > 0 ? top3.map((r, i) =>
               runId: run.id,
               createdAt: run.created_at,
               status: run.status,
-              bestScore: match.best_score
+              bestScore: match.best_score,
+              ligandId: run.ligand_id
             };
           })
           .filter(Boolean);
@@ -371,6 +452,50 @@ ${top3.length > 0 ? top3.map((r, i) =>
       active = false;
     };
   }, [runId, selectedProteinId]);
+
+
+
+  useEffect(() => {
+    if (!ligandModalOpen || !ligandModalEntry) return undefined;
+    let active = true;
+    setLigandLoading(true);
+    setLigandError("");
+    setLigandInfo(null);
+
+    const loadLigand = async () => {
+      try {
+        const ligandPromise = ligandModalEntry.ligandId
+          ? fetchLigand(ligandModalEntry.ligandId)
+          : Promise.resolve(null);
+        const ligand = await ligandPromise;
+        if (!active) return;
+        setLigandInfo(ligand);
+      } catch (err) {
+        if (!active) return;
+        setLigandError(err.message || "Failed to load ligand details");
+      } finally {
+        if (active) setLigandLoading(false);
+      }
+    };
+
+    loadLigand();
+    return () => {
+      active = false;
+    };
+  }, [ligandModalOpen, ligandModalEntry]);
+
+  useEffect(() => {
+    if (!ligandInfo || ligandInfo.smiles || !ligandInfo.molfile) {
+      setDerivedSmiles("");
+      return;
+    }
+    try {
+      const molecule = OCL.Molecule.fromMolfile(ligandInfo.molfile);
+      setDerivedSmiles(molecule.toSmiles());
+    } catch (err) {
+      setDerivedSmiles("");
+    }
+  }, [ligandInfo]);
 
   const receptorAtoms = useMemo(() => parsePdbqtAtoms(viewerData.receptor), [viewerData.receptor]);
   const poseAtoms = useMemo(
@@ -401,29 +526,61 @@ ${top3.length > 0 ? top3.map((r, i) =>
       scored[0]
     );
   }, [historyRuns]);
-  const historyComparison = useMemo(() => {
+  const historyDelta = useMemo(() => {
     if (!historyBestEntry || currentBestScore === null) return null;
-    const bestScore = historyBestEntry.bestScore;
-    const bestMagnitude = Math.abs(bestScore);
-    const currentMagnitude = Math.abs(currentBestScore);
-    const maxMagnitude = Math.max(bestMagnitude, currentMagnitude);
-    const divisor = maxMagnitude || 1;
-    const bestPercent = maxMagnitude ? (bestMagnitude / divisor) * 100 : 100;
-    const currentPercent = maxMagnitude ? (currentMagnitude / divisor) * 100 : 100;
+    return currentBestScore - historyBestEntry.bestScore;
+  }, [historyBestEntry, currentBestScore]);
+  const historyDeltaClass = historyDelta === null ? "" : historyDelta < 0 ? "good" : "bad";
+  const energyPositions = useMemo(() => {
+    if (!historyBestEntry || currentBestScore === null) return null;
+    const values = [0, historyBestEntry.bestScore, currentBestScore].filter((value) =>
+      Number.isFinite(value)
+    );
+    if (!values.length) return null;
+    const maxValue = Math.max(...values);
+    const minValue = Math.min(...values);
+    const range = maxValue - minValue || 1;
+    const positionFor = (value) => {
+      const raw = ((maxValue - value) / range) * 100;
+      return Math.min(100, Math.max(0, raw));
+    };
     return {
-      bestScore,
-      bestPercent,
-      currentPercent,
-      delta: currentBestScore - bestScore
+      zero: positionFor(0),
+      best: positionFor(historyBestEntry.bestScore),
+      current: positionFor(currentBestScore),
+      maxValue,
+      minValue
     };
   }, [historyBestEntry, currentBestScore]);
-  const historyDeltaClass = historyComparison
-    ? historyComparison.delta < 0
-      ? "good"
-      : "bad"
-    : "";
+  const runConditions = useMemo(() => {
+    if (!currentRunMeta) return "";
+    const parts = [];
+    if (currentRunMeta.preset) parts.push(`Preset ${currentRunMeta.preset}`);
+    const optionsText = formatRunOptions(currentRunMeta.options);
+    if (optionsText) parts.push(optionsText);
+    return parts.join(" · ");
+  }, [currentRunMeta]);
+  const targetLabel = selectedResult?.protein_name ? `Target ${selectedResult.protein_name}` : "";
+  const historyMessage = useMemo(() => {
+    if (currentBestScore === null) return "No score yet for this target.";
+    if (!historyBestEntry) return "No scored runs for this target with the same settings yet.";
+    return "";
+  }, [currentBestScore, historyBestEntry]);
   const showProgress =
     status && status.status && status.status !== "SUCCEEDED" && status.status !== "FAILED";
+  const ligandText = ligandInfo?.smiles || derivedSmiles || ligandInfo?.molfile || "";
+  const ligandTextLabel = ligandInfo?.smiles
+    ? "SMILES"
+    : derivedSmiles
+      ? "SMILES (derived)"
+      : ligandInfo?.molfile
+        ? "Molfile"
+        : "Structure";
+  const ligandName = ligandInfo?.name
+    || (ligandModalEntry?.ligandId ? `Ligand ${formatShortId(ligandModalEntry.ligandId)}` : "Ligand");
+  const ligandRunMeta = ligandModalEntry
+    ? `Run ${formatShortId(ligandModalEntry.runId)} · ${formatDate(ligandModalEntry.createdAt)}`
+    : "";
 
   if (!runId) {
     return (
@@ -484,75 +641,115 @@ ${top3.length > 0 ? top3.map((r, i) =>
         </div>
       )}
 
-      <div className="results-overview">
-        <div className="overview-card history-card">
-          <div className="history-header">
-            <div>
-              <p className="muted">History (same target)</p>
-              <h3>Current vs recent best</h3>
-            </div>
-          </div>
-          {historyLoading ? (
-            <p className="muted">Loading history...</p>
-          ) : historyError ? (
-            <p className="error">{historyError}</p>
-          ) : currentBestScore === null ? (
-            <p className="muted">No score yet for this target.</p>
-          ) : !historyBestEntry ? (
-            <p className="muted">No previous runs for this target yet.</p>
-          ) : (
-            <>
-              <div className="history-bars">
-                <div className="history-bar-row">
-                  <span className="history-bar-label">Recent best</span>
-                  <div className="history-bar-track">
-                    <span
-                      className="history-bar-fill"
-                      style={{ width: `${historyComparison.bestPercent}%` }}
-                    />
-                  </div>
-                  <span className="history-bar-value">{formatScore(historyComparison.bestScore)}</span>
-                </div>
-                <div className="history-bar-row">
-                  <span className="history-bar-label">Current</span>
-                  <div className="history-bar-track">
-                    <span
-                      className={`history-bar-fill current ${historyDeltaClass}`}
-                      style={{ width: `${historyComparison.currentPercent}%` }}
-                    />
-                  </div>
-                  <span className={`history-bar-value ${historyDeltaClass}`}>
-                    {formatScore(currentBestScore)}
-                  </span>
-                </div>
-                <p className="muted">Lower score is better.</p>
-              </div>
-              <details className="history-details">
-                <summary>Recent runs</summary>
-                <div className="history-list">
-                  {historyRows.map((entry) => (
-                    <button
-                      key={entry.runId}
-                      type="button"
-                      className="history-row"
-                      onClick={() => navigate(`/results/${entry.runId}`)}
-                    >
-                      <span className="history-meta">
-                        <span className="history-date">{formatDate(entry.createdAt)}</span>
-                        <span className="history-id">Run {entry.runId.slice(0, 8)}</span>
-                      </span>
-                      <span className="history-score">{formatScore(entry.bestScore)}</span>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </>
-          )}
-        </div>
-      </div>
-
       <div className="results-layout">
         <aside className="results-sidebar">
+          <div className="overview-card history-card">
+            <div className="history-header">
+              <div>
+                <p className="muted">History (same target + settings)</p>
+                <h3>Energy diagram</h3>
+                {runConditions && <p className="muted">{runConditions}</p>}
+                {targetLabel && <p className="muted">{targetLabel}</p>}
+              </div>
+            </div>
+            {historyLoading ? (
+              <p className="muted">Loading history...</p>
+            ) : historyError ? (
+              <p className="error">{historyError}</p>
+            ) : (
+              <div className="history-grid">
+                <div className="energy-diagram">
+                  {historyMessage ? (
+                    <p className="muted">{historyMessage}</p>
+                  ) : (
+                    <>
+                      <div className="energy-axis">
+                        <span
+                          className="energy-zero"
+                          style={{ top: `${energyPositions?.zero ?? 0}%` }}
+                        />
+                        <div
+                          className="energy-marker best"
+                          style={{ top: `${energyPositions?.best ?? 0}%` }}
+                        >
+                          <span className="energy-dot" />
+                          <span className="energy-label">
+                            Recent best {formatScore(historyBestEntry?.bestScore)}
+                          </span>
+                        </div>
+                        <div
+                          className={`energy-marker current ${historyDeltaClass}`}
+                          style={{ top: `${energyPositions?.current ?? 0}%` }}
+                        >
+                          <span className="energy-dot" />
+                          <span className="energy-label">
+                            Current {formatScore(currentBestScore)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="energy-caption">
+                        <span className="muted">0 kcal/mol baseline (lower is better)</span>
+                        {historyDelta !== null && (
+                          <span className={`energy-delta ${historyDeltaClass}`}>
+                            {historyDelta < 0
+                              ? `Δ ${Math.abs(historyDelta).toFixed(2)} better`
+                              : `Δ ${historyDelta.toFixed(2)} worse`} kcal/mol
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="history-recent">
+                  <div className="history-recent-header">
+                    <h4>Recent runs</h4>
+                    <span className="muted">Same target + settings</span>
+                  </div>
+                  {historyRows.length === 0 ? (
+                    <p className="muted">No matching runs yet.</p>
+                  ) : (
+                    <div className="history-list">
+                      {historyRows.map((entry) => (
+                        <div
+                          key={entry.runId}
+                          role="button"
+                          tabIndex={0}
+                          className="history-row"
+                          title={`Run ${formatShortId(entry.runId)} · ${formatDate(entry.createdAt)}${entry.ligandId ? ` · Ligand ${formatShortId(entry.ligandId)}` : ""}`}
+                          onClick={() => navigate(`/results/${entry.runId}`)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              navigate(`/results/${entry.runId}`);
+                            }
+                          }}
+                        >
+                          <span className="history-meta">
+                            <span className="history-date">{formatDate(entry.createdAt)}</span>
+                            <span className="history-id">Run {formatShortId(entry.runId)}</span>
+                          </span>
+                          <span className="history-actions">
+                            <span className="history-score">{formatScore(entry.bestScore)}</span>
+                            <button
+                              type="button"
+                              className="history-ligand-button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleOpenLigandModal(entry);
+                              }}
+                              disabled={!entry.ligandId}
+                            >
+                              Ligand
+                            </button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="target-list">
             <h3>Targets</h3>
             <div className="target-list-body">
@@ -764,6 +961,56 @@ ${top3.length > 0 ? top3.map((r, i) =>
           </div>
         </div>
       </div>
+      <Modal
+        title="Ligand details"
+        isOpen={ligandModalOpen}
+        onClose={handleCloseLigandModal}
+      >
+        {ligandLoading ? (
+          <p className="muted">Loading ligand...</p>
+        ) : ligandError ? (
+          <p className="error">{ligandError}</p>
+        ) : (
+          <div className="ligand-modal">
+            <div className="ligand-modal-header">
+              <div>
+                <h4>{ligandName}</h4>
+                {ligandRunMeta && <p className="muted">{ligandRunMeta}</p>}
+                {targetLabel && <p className="muted">{targetLabel}</p>}
+              </div>
+              <button
+                className="button-secondary"
+                onClick={() => handleCopyLigandText(ligandText)}
+                disabled={!ligandText}
+              >
+                {ligandCopied ? "Copied!" : `Copy ${ligandTextLabel}`}
+              </button>
+            </div>
+            <div className="ligand-modal-grid">
+              <div className="ligand-structure">
+                <p className="muted">2D structure</p>
+                <Structure2D
+                  smiles={ligandInfo?.smiles}
+                  molfile={ligandInfo?.molfile}
+                />
+              </div>
+              <div>
+                <p className="muted">{ligandTextLabel}</p>
+                {ligandText ? (
+                  <textarea
+                    className="ligand-textarea"
+                    rows={8}
+                    value={ligandText}
+                    readOnly
+                  />
+                ) : (
+                  <p className="muted">No SMILES or Molfile available.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
       <Modal
         title="Copy Report Template"
         isOpen={reportOpen}

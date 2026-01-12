@@ -82,3 +82,35 @@ def test_run_options_override(client, db_session):
     assert status_resp.status_code == 200
     status = status_resp.json()
     assert status["total"] == 2
+
+
+def test_list_runs_includes_options(client, db_session):
+    protein = Protein(
+        id="prot_opts",
+        name="Options Protein",
+        category="Kinase",
+        organism="Homo sapiens",
+        source_id="PDB:OPTS",
+        receptor_pdbqt_path="receptors/prot_opts/receptor.pdbqt",
+        default_box_json={"center": [0.0, 0.0, 0.0], "size": [20.0, 20.0, 20.0]},
+        status="READY",
+    )
+    db_session.add(protein)
+    db_session.commit()
+
+    ligand_resp = client.post("/ligands", json={"name": "Ligand", "smiles": "CCO"})
+    ligand_id = ligand_resp.json()["ligand_id"]
+
+    run_resp = client.post(
+        "/runs",
+        json={"ligand_id": ligand_id, "protein_ids": ["prot_opts"], "preset": "Fast"},
+    )
+    assert run_resp.status_code == 200
+    run_id = run_resp.json()["run_id"]
+
+    list_resp = client.get("/runs")
+    assert list_resp.status_code == 200
+    runs = list_resp.json()
+    run_entry = next(item for item in runs if item["id"] == run_id)
+    assert "options" in run_entry
+    assert run_entry["options"]["num_conformers"] == 5

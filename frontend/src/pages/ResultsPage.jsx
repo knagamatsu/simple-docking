@@ -4,6 +4,7 @@ import { RunContext } from "../App.jsx";
 import { fetchFile, fetchProteinFile, fetchRunResults, fetchRunStatus, listRuns } from "../api.js";
 import Viewer from "../components/Viewer.jsx";
 import { CopyIcon, CheckIcon, DownloadIcon, PlusIcon } from "../components/Icons.jsx";
+import Modal from "../components/Modal.jsx";
 
 const CONTACT_CUTOFFS = [3.5, 4.0, 5.0];
 const SPEED_OPTIONS = [
@@ -156,6 +157,9 @@ export default function ResultsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportFormat, setReportFormat] = useState("markdown");
+  const [reportContent, setReportContent] = useState("");
 
   const handleNewRun = () => {
     setLigandId(null);
@@ -167,40 +171,77 @@ export default function ResultsPage() {
     navigate("/");
   };
 
-  const handleDownload = () => {
-    const apiBase = import.meta.env.VITE_API_BASE || "/api";
-    window.location.href = `${apiBase}/runs/${runId}/export?fmt=zip`;
-  };
-
-  const generateReportTemplate = () => {
+  const generateReportText = (format) => {
     const ranking = results.ranking || [];
     const top3 = ranking.slice(0, 3);
     const preset = results.preset || "Balanced";
     const smiles = results.ligand_smiles || "N/A";
     const createdAt = status?.created_at ? formatDate(status.created_at) : formatDate(new Date().toISOString());
+    const count = results.per_protein?.length || 0;
 
-    const template = `## ドッキングシミュレーション結果
+    if (format === "markdown") {
+      return `## ドッキングシミュレーション結果
 
 ### 実行条件
 - 実行日時: ${createdAt}
 - Run ID: ${runId}
 - リガンド (SMILES): ${smiles}
 - プリセット: ${preset}
-- ターゲット数: ${results.per_protein?.length || 0}
+- ターゲット数: ${count}
 
 ### 結果サマリー（上位3件）
+${top3.length > 0 ? top3.map((r, i) =>
+        `${i + 1}. ${r.protein_name}: ${formatScore(r.best_score)} kcal/mol`
+      ).join('\n') : '結果なし'}
+
+### 備考
+本結果は仮説生成のための参考値であり、実験的検証が必要です。
+スコアが低いほど結合親和性が高いことを示唆します。`;
+    }
+
+    // Plain text format
+    return `【ドッキングシミュレーション結果】
+
+[実行条件]
+実行日時: ${createdAt}
+Run ID: ${runId}
+リガンド: ${smiles}
+プリセット: ${preset}
+ターゲット数: ${count}
+
+[結果サマリー]
 ${top3.length > 0 ? top3.map((r, i) =>
       `${i + 1}. ${r.protein_name}: ${formatScore(r.best_score)} kcal/mol`
     ).join('\n') : '結果なし'}
 
-### 備考
+[備考]
 本結果は仮説生成のための参考値であり、実験的検証が必要です。
-スコアが低いほど結合親和性が高いことを示唆します。
-`;
-    navigator.clipboard.writeText(template).then(() => {
+スコアが低いほど結合親和性が高いことを示唆します。`;
+  };
+
+  const handleOpenReport = () => {
+    setReportContent(generateReportText(reportFormat));
+    setReportOpen(true);
+  };
+
+  const handleFormatChange = (fmt) => {
+    setReportFormat(fmt);
+    setReportContent(generateReportText(fmt));
+  };
+
+  const handleCopyReport = () => {
+    navigator.clipboard.writeText(reportContent).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {
+        setCopied(false);
+        setReportOpen(false);
+      }, 1000);
     });
+  };
+
+  const handleDownload = () => {
+    const apiBase = import.meta.env.VITE_API_BASE || "/api";
+    window.location.href = `${apiBase}/runs/${runId}/export?fmt=zip`;
   };
 
   useEffect(() => {
@@ -403,11 +444,11 @@ ${top3.length > 0 ? top3.map((r, i) =>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
           <div className="status-chip">Run {status?.status || "PENDING"}</div>
           <button
-            onClick={generateReportTemplate}
-            className={copied ? "copy-button copied" : "copy-button"}
+            onClick={handleOpenReport}
+            className="copy-button"
             disabled={!results.ranking?.length}
           >
-            {copied ? <><CheckIcon size={16} /> Copied</> : <><CopyIcon size={16} /> Copy Report</>}
+            <CopyIcon size={16} /> Copy Report
           </button>
           <button
             onClick={handleDownload}
@@ -723,6 +764,47 @@ ${top3.length > 0 ? top3.map((r, i) =>
           </div>
         </div>
       </div>
+      <Modal
+        title="Copy Report Template"
+        isOpen={reportOpen}
+        onClose={() => setReportOpen(false)}
+      >
+        <div style={{ marginBottom: "16px" }}>
+          <p className="muted" style={{ marginBottom: "12px" }}>Select format and edit before copying.</p>
+          <div className="segmented" style={{ display: "inline-flex" }}>
+            <button
+              type="button"
+              className={reportFormat === "markdown" ? "active" : ""}
+              onClick={() => handleFormatChange("markdown")}
+            >
+              Markdown
+            </button>
+            <button
+              type="button"
+              className={reportFormat === "text" ? "active" : ""}
+              onClick={() => handleFormatChange("text")}
+            >
+              Plain Text
+            </button>
+          </div>
+        </div>
+        <textarea
+          style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid var(--border)", fontFamily: "monospace", fontSize: "13px", lineHeight: "1.5" }}
+          rows={12}
+          value={reportContent}
+          onChange={(e) => setReportContent(e.target.value)}
+        />
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "16px" }}>
+          <button className="button-secondary" onClick={() => setReportOpen(false)}>Cancel</button>
+          <button
+            className={copied ? "primary success-pulse" : "primary"} // Assuming success-pulse animation or similar, or just let state handle it
+            onClick={handleCopyReport}
+            style={{ minWidth: "120px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+          >
+            {copied ? <><CheckIcon size={16} /> Copied!</> : "Copy to Clipboard"}
+          </button>
+        </div>
+      </Modal>
     </section>
   );
 }

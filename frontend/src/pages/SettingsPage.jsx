@@ -2,6 +2,7 @@ import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RunContext } from "../App.jsx";
 import { createBatch, createRun } from "../api.js";
+import StickyFooter from "../components/StickyFooter.jsx";
 
 const PRESETS = [
   {
@@ -82,7 +83,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <section className="panel">
+    <section className="panel" style={{ paddingBottom: "80px" }}>
       <div className="panel-header">
         <div>
           <h2>3. Run Settings</h2>
@@ -149,12 +150,12 @@ export default function SettingsPage() {
 
       {error && <div className="error">{error}</div>}
 
-      <div className="actions">
-        <span></span>
-        <button className="primary" type="button" onClick={handleRun} disabled={loading}>
-          {loading ? "Launching..." : inputMode === "batch" ? "Run Batch Docking" : "Run Docking"}
-        </button>
-      </div>
+      <StickyFooter
+        onBack={() => navigate("/targets")}
+        onNext={handleRun}
+        nextLabel={loading ? "Launching..." : inputMode === "batch" ? "Run Batch Docking" : "Run Docking"}
+        nextDisabled={loading}
+      />
     </section>
   );
 }

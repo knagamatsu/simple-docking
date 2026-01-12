@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RunContext } from "../App.jsx";
 import { fetchProteins, importProteinFromPdb, pasteProtein } from "../api.js";
+import StickyFooter from "../components/StickyFooter.jsx";
 
 export default function TargetsPage() {
   const navigate = useNavigate();
@@ -207,7 +208,7 @@ export default function TargetsPage() {
   const advancedPresets = presets.filter((p) => ["all", "oncology", "signaling", "custom"].includes(p.id));
 
   return (
-    <section className="panel">
+    <section className="panel" style={{ paddingBottom: "80px" }}>
       <div className="panel-header">
         <div>
           <h2>2. Target Library</h2>
@@ -364,17 +365,16 @@ export default function TargetsPage() {
         )}
       </div>
 
-      <div className="actions">
-        <span className="muted">Selected: {selectedProteins.length}</span>
-        <button
-          className="primary"
-          type="button"
-          onClick={() => navigate("/settings")}
-          disabled={selectedProteins.length === 0}
-        >
-          Next: Settings
-        </button>
-      </div>
+      <StickyFooter
+        onBack={() => navigate("/")}
+        onNext={() => navigate("/settings")}
+        nextLabel="Next: Settings"
+        nextDisabled={selectedProteins.length === 0}
+      >
+        <div style={{ color: "var(--muted)", fontWeight: 500 }}>
+          Selected: <span style={{ color: "var(--fg)", fontWeight: 600 }}>{selectedProteins.length}</span>
+        </div>
+      </StickyFooter>
     </section>
   );
 }

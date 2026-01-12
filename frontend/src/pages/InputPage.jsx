@@ -4,6 +4,7 @@ import { Editor } from "ketcher-react";
 import { StandaloneStructServiceProvider } from "ketcher-standalone";
 import { RunContext } from "../App.jsx";
 import { createLigand } from "../api.js";
+import StickyFooter from "../components/StickyFooter.jsx";
 import "ketcher-react/dist/index.css";
 
 const structServiceProvider = new StandaloneStructServiceProvider();
@@ -126,7 +127,7 @@ export default function InputPage() {
   };
 
   return (
-    <section className="panel">
+    <section className="panel" style={{ paddingBottom: "80px" }}>
       <div className="panel-header">
         <div>
           <h2>1. Structure Input</h2>
@@ -217,9 +218,14 @@ export default function InputPage() {
 
             {error && <div className="error">{error}</div>}
 
-            <button className="primary" type="button" onClick={handleSubmit} disabled={loading}>
-              {loading ? "Submitting..." : "Next: Choose Targets"}
-            </button>
+            {error && <div className="error">{error}</div>}
+
+            <StickyFooter
+              onNext={handleSubmit}
+              nextLabel={loading ? "Submitting..." : "Next: Choose Targets"}
+              nextDisabled={loading}
+              showBack={false}
+            />
           </div>
         </div>
       ) : (
@@ -271,12 +277,15 @@ export default function InputPage() {
               />
             </label>
             {batchError && <div className="error">{batchError}</div>}
-            <button className="primary" type="button" onClick={handleBatchNext}>
-              Next: Choose Targets
-            </button>
+            <StickyFooter
+              onNext={handleBatchNext}
+              nextLabel="Next: Choose Targets"
+              showBack={false}
+            />
           </div>
         </div>
-      )}
-    </section>
+      )
+      }
+    </section >
   );
 }

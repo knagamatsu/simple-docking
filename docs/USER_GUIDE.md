@@ -1,7 +1,7 @@
 # Simple Docking Dashboard ユーザーガイド
 
 **バージョン**: 0.8.0
-**最終更新**: 2026-01-11
+**最終更新**: 2026-01-12
 
 ---
 
@@ -167,6 +167,11 @@ simple-docking-worker-1     Up
 git pull
 docker compose up -d --build
 ```
+
+- **Git が使えない場合**:
+  1. 最新版の ZIP をダウンロードして展開（新しいフォルダ）
+  2. 既存の `.env` と `data/` を新しいフォルダへコピー
+  3. `docker compose up -d --build` を実行
 
 - 既に起動中なら `./start.sh` を実行して再起動を選択しても OK
 - データは `./data/postgres` と `./data/object_store` に保存されるため、再ビルドや `docker compose down` だけでは消えません

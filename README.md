@@ -7,8 +7,8 @@
 
 ## 起動（Ubuntu）
 1. Docker / Docker Compose をインストール
-2. Git をインストール（`git clone` に必要）
-3. リポジトリを取得
+2. Git をインストール（`git clone` を使う場合）
+3. リポジトリを取得（Git がない場合は ZIP をダウンロードして展開）
 4. 環境変数ファイルを作成（オプション）
    ```bash
    cp .env.example .env

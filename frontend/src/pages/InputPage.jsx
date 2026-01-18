@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Editor } from "ketcher-react";
 import { StandaloneStructServiceProvider } from "ketcher-standalone";
 import { RunContext } from "../App.jsx";
-import { createLigand } from "../api.js";
+import { createLigand, createRun } from "../api.js";
+
+const DEFAULT_TARGETS = ["prot_cdk2", "prot_egfr", "prot_pka"];
+const DEFAULT_PRESET = "Balanced";
 import StickyFooter from "../components/StickyFooter.jsx";
 import "ketcher-react/dist/index.css";
 
@@ -14,6 +17,8 @@ export default function InputPage() {
   const {
     setLigandId,
     setRunId,
+    setSelectedProteins,
+    setPreset,
     inputMode,
     setInputMode,
     batchInput,
@@ -32,6 +37,7 @@ export default function InputPage() {
   const [batchFormat, setBatchFormat] = useState(batchInput?.format || "csv");
   const [batchText, setBatchText] = useState(batchInput?.text || "");
   const [batchError, setBatchError] = useState("");
+  const [quickRunLoading, setQuickRunLoading] = useState(false);
 
   const handleKetcherInit = (ketcher) => {
     ketcherInstanceRef.current = ketcher;
@@ -61,6 +67,50 @@ export default function InputPage() {
       setError(err.message || "Failed to submit ligand");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickRun = async () => {
+    setQuickRunLoading(true);
+    setError("");
+    setEditorError("");
+    try {
+      let smilesText = smiles;
+      if (ketcherInstanceRef.current) {
+        try {
+          const editorSmiles = await ketcherInstanceRef.current.getSmiles();
+          if (editorSmiles && editorSmiles.trim()) {
+            smilesText = editorSmiles;
+          }
+        } catch {
+          // Use existing smiles if editor read fails
+        }
+      }
+      if (!smilesText || !smilesText.trim()) {
+        setEditorError("Draw a structure in the editor or enter SMILES first.");
+        return;
+      }
+      // Create ligand
+      const ligandResponse = await createLigand({
+        name: name || undefined,
+        smiles: smilesText
+      });
+      setLigandId(ligandResponse.ligand_id);
+      // Set defaults and run immediately
+      setSelectedProteins(DEFAULT_TARGETS);
+      setPreset(DEFAULT_PRESET);
+      const runResponse = await createRun({
+        ligand_id: ligandResponse.ligand_id,
+        protein_ids: DEFAULT_TARGETS,
+        preset: DEFAULT_PRESET
+      });
+      setRunId(runResponse.run_id);
+      setBatchId(null);
+      navigate(`/results/${runResponse.run_id}`);
+    } catch (err) {
+      setError(err.message || "Failed to start quick run");
+    } finally {
+      setQuickRunLoading(false);
     }
   };
 
@@ -167,6 +217,19 @@ export default function InputPage() {
                   Use Editor Structure
                 </button>
                 <span className="muted">Loads the drawing into the input form.</span>
+              </div>
+              <div className="quick-run-section">
+                <button
+                  type="button"
+                  className="button-primary quick-run-button"
+                  onClick={handleQuickRun}
+                  disabled={quickRunLoading || loading}
+                >
+                  {quickRunLoading ? "Starting..." : "Quick Run"}
+                </button>
+                <p className="muted quick-run-hint">
+                  Run with recommended targets (CDK2, EGFR, PKA) and balanced settings.
+                </p>
               </div>
               {editorError && <div className="error">{editorError}</div>}
             </div>

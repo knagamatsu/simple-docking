@@ -219,6 +219,7 @@ export default function ResultsPage() {
   const [historyError, setHistoryError] = useState("");
   const [currentRunMeta, setCurrentRunMeta] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [reproCopied, setReproCopied] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportFormat, setReportFormat] = useState("markdown");
   const [reportContent, setReportContent] = useState("");
@@ -420,6 +421,16 @@ ${top3.length > 0 ? top3.map((r, i) =>
         setCopied(false);
         setReportOpen(false);
       }, 1000);
+    });
+  };
+
+  const handleCopyReproLog = () => {
+    if (!reproLog) return;
+    navigator.clipboard.writeText(reproLog).then(() => {
+      setReproCopied(true);
+      setTimeout(() => {
+        setReproCopied(false);
+      }, 1200);
     });
   };
 
@@ -931,6 +942,42 @@ ${top3.length > 0 ? top3.map((r, i) =>
     if (optionsText) parts.push(optionsText);
     return parts.join(" · ");
   }, [currentRunMeta]);
+  const currentLigandSmiles = useMemo(() => {
+    if (!currentLigand) return "";
+    if (currentLigand.smiles) return currentLigand.smiles;
+    if (!currentLigand.molfile) return "";
+    try {
+      const molecule = OCL.Molecule.fromMolfile(currentLigand.molfile);
+      return molecule.toSmiles();
+    } catch (err) {
+      return "";
+    }
+  }, [currentLigand]);
+  const reproLog = useMemo(() => {
+    const lines = [];
+    lines.push(`Run ID: ${runId || "-"}`);
+    lines.push(`Created: ${currentRunMeta?.created_at ? formatDateTime(currentRunMeta.created_at) : "-"}`);
+    lines.push(`Preset: ${currentRunMeta?.preset || "-"}`);
+    lines.push(`Options: ${currentRunMeta?.options ? stableStringify(currentRunMeta.options) : "-"}`);
+    lines.push(`Ligand ID: ${currentRunMeta?.ligand_id || "-"}`);
+    lines.push(`Ligand Name: ${currentLigand?.name || "-"}`);
+    lines.push(`Ligand SMILES: ${currentLigandSmiles || "-"}`);
+    if (!currentLigandSmiles && currentLigand?.molfile) {
+      lines.push("Ligand Molfile: available");
+    }
+    if (!targetEntries.length) {
+      lines.push("Targets: -");
+      return lines.join("\n");
+    }
+    lines.push("Targets:");
+    targetEntries.forEach((entry) => {
+      const label = entry.protein_name
+        ? `${entry.protein_name} (${entry.protein_id})`
+        : entry.protein_id;
+      lines.push(`- ${label}`);
+    });
+    return lines.join("\n");
+  }, [runId, currentRunMeta, currentLigand, currentLigandSmiles, targetEntries]);
   const targetLabel = selectedResult?.protein_name ? `Target ${selectedResult.protein_name}` : "";
   const historyMessage = useMemo(() => {
     if (currentBestScore === null) return "No score yet for this target.";
@@ -1231,6 +1278,24 @@ ${top3.length > 0 ? top3.map((r, i) =>
                   </div>
                 ))
             )}
+          </div>
+          <div className="mini-card">
+            <div className="mini-card-header">
+              <h3>Reproducibility log</h3>
+              <button
+                type="button"
+                className={`copy-button${reproCopied ? " copied" : ""}`}
+                onClick={handleCopyReproLog}
+              >
+                <CopyIcon size={14} />
+                {reproCopied ? "Copied!" : "Copy log"}
+              </button>
+            </div>
+            <p className="muted">Run inputs needed to reproduce this result.</p>
+            <details className="history-details">
+              <summary>View log</summary>
+              <textarea className="ligand-textarea" rows={8} value={reproLog} readOnly />
+            </details>
           </div>
           <PropertiesPanel ligandId={currentRunMeta?.ligand_id} />
         </aside>

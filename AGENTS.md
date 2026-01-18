@@ -15,6 +15,14 @@
 - `cd backend && uv run --extra test pytest`: Run backend tests.
 - `cd frontend && npm install && npm run dev`: Run UI locally (port `3000` inside container, `3001` on host via compose).
 
+## Parallel Development (git worktree)
+- Use `git worktree` for parallel work; branch from `origin/develop`.
+- Before starting work, run `git fetch origin --prune`.
+- If work maps to a roadmap item, move it to "In Progress" and add a short owner/branch/worktree/started note.
+- Each worktree must have its own `.env`; set a unique `EXTERNAL_PORT` and `COMPOSE_PROJECT_NAME`.
+- Do not expose DB/Redis ports unless needed; if you do, set unique `DEV_DB_PORT` and `DEV_REDIS_PORT`.
+- If running the Vite dev server outside Docker, choose a unique port (for example, `npm run dev -- --port 3002`).
+
 ## Coding Style & Naming Conventions
 - Python: 4 spaces, type hints where practical, snake_case for functions/vars, PascalCase for classes.
 - JavaScript/React: 2 spaces, camelCase for variables, PascalCase for components.

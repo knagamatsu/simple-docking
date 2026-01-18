@@ -210,8 +210,7 @@
 ### v0.9 - ワンクリックで示唆を得る
 
 #### 体験フロー
-- [ ] Ketcher → Run → 結果の一本道導線（プリセット/自動入力）
-  - **In Progress**: feature/one-click-flow | worktree: simple-docking-one-click-flow | 2026-01-18
+- [x] Ketcher → Run → 結果の一本道導線（プリセット/自動入力）
 - [x] 既存化合物との比較カード（履歴ベースの相対比較）
 - [x] 結果の一文サマリー（専門用語を最小化）
 - [x] 履歴の検索/ピン留め（過去結果の整理）

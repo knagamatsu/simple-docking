@@ -28,9 +28,14 @@ from app.schemas import (
     BatchRunEntry,
     BatchStatusResponse,
     BatchSummary,
+    ChEMBLActivity,
+    ChEMBLCompound,
+    ChEMBLSearchResponse,
     LigandCreate,
     LigandCreateResponse,
     LigandOut,
+    LipinskiRule,
+    MolecularProperties,
     ProteinOut,
     ProteinImportRequest,
     ProteinPasteRequest,
@@ -62,6 +67,8 @@ MAX_MOLFILE_CHARS = 100_000
 PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
 CSV_SMILES_HEADERS = {"smiles", "smile"}
 CSV_NAME_HEADERS = {"name", "compound", "id", "identifier", "title"}
+CHEMBL_API_BASE = "https://www.ebi.ac.uk/chembl/api/data"
+CHEMBL_TIMEOUT = 10
 
 
 def safe_int(value, default: int) -> int:
@@ -343,6 +350,130 @@ def fetch_pdb_from_rcsb(pdb_id: str) -> str:
         raise RuntimeError("Failed to decode PDB response") from exc
 
 
+def calculate_molecular_properties(smiles: str) -> MolecularProperties:
+    from rdkit import Chem
+    from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError("Invalid SMILES string")
+
+    mw = Descriptors.MolWt(mol)
+    logp = Descriptors.MolLogP(mol)
+    tpsa = Descriptors.TPSA(mol)
+    hbd = Lipinski.NumHDonors(mol)
+    hba = Lipinski.NumHAcceptors(mol)
+    rotatable = Lipinski.NumRotatableBonds(mol)
+    rings = rdMolDescriptors.CalcNumRings(mol)
+    heavy_atoms = Lipinski.HeavyAtomCount(mol)
+
+    mw_ok = mw <= 500
+    logp_ok = logp <= 5
+    hbd_ok = hbd <= 5
+    hba_ok = hba <= 10
+    violations = sum([not mw_ok, not logp_ok, not hbd_ok, not hba_ok])
+
+    lipinski = LipinskiRule(
+        mw_ok=mw_ok,
+        logp_ok=logp_ok,
+        hbd_ok=hbd_ok,
+        hba_ok=hba_ok,
+        passes=violations == 0,
+        violations=violations,
+    )
+
+    return MolecularProperties(
+        smiles=smiles,
+        molecular_weight=round(mw, 2),
+        logp=round(logp, 2),
+        tpsa=round(tpsa, 2),
+        hbd=hbd,
+        hba=hba,
+        rotatable_bonds=rotatable,
+        rings=rings,
+        heavy_atoms=heavy_atoms,
+        lipinski=lipinski,
+    )
+
+
+def smiles_to_canonical(smiles: str) -> str:
+    from rdkit import Chem
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError("Invalid SMILES string")
+    return Chem.MolToSmiles(mol, canonical=True)
+
+
+def fetch_chembl_similar(smiles: str, threshold: int = 70) -> list[ChEMBLCompound]:
+    import json
+    from urllib.parse import quote
+
+    encoded_smiles = quote(smiles, safe="")
+    url = f"{CHEMBL_API_BASE}/similarity/{encoded_smiles}/{threshold}.json"
+
+    try:
+        req = urllib_request.Request(url, headers={"Accept": "application/json"})
+        with urllib_request.urlopen(req, timeout=CHEMBL_TIMEOUT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        if exc.code == 404:
+            return []
+        logger.warning(f"ChEMBL API error: {exc.code}")
+        return []
+    except URLError as exc:
+        logger.warning(f"ChEMBL API unreachable: {exc}")
+        return []
+    except json.JSONDecodeError:
+        return []
+
+    compounds = []
+    for mol in data.get("molecules", [])[:10]:
+        compounds.append(
+            ChEMBLCompound(
+                chembl_id=mol.get("molecule_chembl_id", ""),
+                smiles=mol.get("molecule_structures", {}).get("canonical_smiles"),
+                similarity=mol.get("similarity", 0),
+                pref_name=mol.get("pref_name"),
+                max_phase=mol.get("max_phase"),
+                molecule_type=mol.get("molecule_type"),
+            )
+        )
+    return compounds
+
+
+def fetch_chembl_activities(chembl_id: str, limit: int = 5) -> list[ChEMBLActivity]:
+    import json
+
+    url = f"{CHEMBL_API_BASE}/activity.json?molecule_chembl_id={chembl_id}&limit={limit}"
+
+    try:
+        req = urllib_request.Request(url, headers={"Accept": "application/json"})
+        with urllib_request.urlopen(req, timeout=CHEMBL_TIMEOUT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, json.JSONDecodeError):
+        return []
+
+    activities = []
+    for act in data.get("activities", []):
+        value = act.get("value") or act.get("standard_value")
+        try:
+            value_float = float(value) if value is not None else None
+        except (ValueError, TypeError):
+            value_float = None
+
+        activities.append(
+            ChEMBLActivity(
+                chembl_id=chembl_id,
+                target_name=act.get("target_pref_name"),
+                activity_type=act.get("standard_type") or act.get("type"),
+                activity_value=value_float,
+                activity_units=act.get("standard_units") or act.get("units"),
+            )
+        )
+    return activities
+
+
 def protein_to_out(protein: Protein) -> ProteinOut:
     return ProteinOut(
         id=protein.id,
@@ -436,6 +567,67 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             molfile=ligand.molfile,
             status=ligand.status,
             error=ligand.error,
+        )
+
+    @app.get("/ligands/{ligand_id}/properties", response_model=MolecularProperties)
+    def get_ligand_properties(ligand_id: str, session: Session = Depends(get_session)):
+        ligand = session.get(Ligand, ligand_id)
+        if not ligand:
+            raise HTTPException(status_code=404, detail="Ligand not found")
+
+        smiles = ligand.smiles
+        if not smiles and ligand.molfile:
+            from rdkit import Chem
+
+            mol = Chem.MolFromMolBlock(ligand.molfile)
+            if mol:
+                smiles = Chem.MolToSmiles(mol, canonical=True)
+
+        if not smiles:
+            raise HTTPException(status_code=400, detail="No valid structure found")
+
+        try:
+            return calculate_molecular_properties(smiles)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/ligands/{ligand_id}/chembl", response_model=ChEMBLSearchResponse)
+    def get_ligand_chembl(
+        ligand_id: str,
+        threshold: int = Query(default=70, ge=40, le=100),
+        session: Session = Depends(get_session),
+    ):
+        ligand = session.get(Ligand, ligand_id)
+        if not ligand:
+            raise HTTPException(status_code=404, detail="Ligand not found")
+
+        smiles = ligand.smiles
+        if not smiles and ligand.molfile:
+            from rdkit import Chem
+
+            mol = Chem.MolFromMolBlock(ligand.molfile)
+            if mol:
+                smiles = Chem.MolToSmiles(mol, canonical=True)
+
+        if not smiles:
+            raise HTTPException(status_code=400, detail="No valid structure found")
+
+        try:
+            canonical = smiles_to_canonical(smiles)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        similar = fetch_chembl_similar(canonical, threshold)
+
+        activities: list[ChEMBLActivity] = []
+        for compound in similar[:3]:
+            activities.extend(fetch_chembl_activities(compound.chembl_id, limit=3))
+
+        return ChEMBLSearchResponse(
+            query_smiles=canonical,
+            threshold=threshold,
+            similar_compounds=similar,
+            known_activities=activities,
         )
 
     @app.get("/proteins", response_model=List[ProteinOut])

@@ -13,6 +13,7 @@ import {
 import Viewer from "../components/Viewer.jsx";
 import Structure2D from "../components/Structure2D.jsx";
 import PoseSnapshot from "../components/PoseSnapshot.jsx";
+import PropertiesPanel from "../components/PropertiesPanel.jsx";
 import { CopyIcon, CheckIcon, DownloadIcon, PlusIcon, FileTextIcon } from "../components/Icons.jsx";
 import Modal from "../components/Modal.jsx";
 import OCL from "openchemlib/full";
@@ -1231,6 +1232,7 @@ ${top3.length > 0 ? top3.map((r, i) =>
                 ))
             )}
           </div>
+          <PropertiesPanel ligandId={currentRunMeta?.ligand_id} />
         </aside>
 
         <div>

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { RunContext } from "../App.jsx";
 import {
@@ -7,11 +7,13 @@ import {
   fetchProteinFile,
   fetchRunResults,
   fetchRunStatus,
-  listRuns
+  listRuns,
+  API_BASE
 } from "../api.js";
 import Viewer from "../components/Viewer.jsx";
 import Structure2D from "../components/Structure2D.jsx";
-import { CopyIcon, CheckIcon, DownloadIcon, PlusIcon } from "../components/Icons.jsx";
+import PoseSnapshot from "../components/PoseSnapshot.jsx";
+import { CopyIcon, CheckIcon, DownloadIcon, PlusIcon, FileTextIcon } from "../components/Icons.jsx";
 import Modal from "../components/Modal.jsx";
 import OCL from "openchemlib/full";
 
@@ -140,6 +142,13 @@ function formatDate(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toISOString().replace("T", " ").slice(0, 16);
+}
+
 function formatShortId(value) {
   if (!value) return "-";
   return String(value).slice(0, 8);
@@ -162,6 +171,24 @@ function formatRunOptions(options) {
   if (Number.isFinite(options.exhaustiveness)) parts.push(`Exhaustiveness ${options.exhaustiveness}`);
   if (Number.isFinite(options.num_conformers)) parts.push(`Conformers ${options.num_conformers}`);
   return parts.join(" · ");
+}
+
+function buildInsightText({ targetName, currentBestScore, referenceEntry }) {
+  if (!targetName) return "ターゲットが選択されていないため、示唆を生成できません。";
+  if (currentBestScore === null) {
+    return `${targetName} のスコアがまだ得られていないため、示唆は生成されていません。`;
+  }
+  if (!referenceEntry) {
+    return `${targetName} の参照値が未登録のため比較はできませんが、候補スコア ${formatScore(currentBestScore)} kcal/mol が基準値として得られました。`;
+  }
+  const deltaValue = currentBestScore - referenceEntry.bestScore;
+  const deltaLabel = Math.abs(deltaValue).toFixed(2);
+  const direction = deltaValue < 0 ? "低い" : "高い";
+  const referenceLabel = `Run ${formatShortId(referenceEntry.runId)}`;
+  const conclusion = deltaValue < 0
+    ? "同一条件下で参照より良好な結合傾向が示唆されます。"
+    : "同一条件下では参照と同等または弱い結合傾向が示唆されます。";
+  return `${targetName} に対して、候補は ${formatScore(currentBestScore)} kcal/mol、参照（${referenceLabel}）は ${formatScore(referenceEntry.bestScore)} kcal/mol で、候補が ${deltaLabel} kcal/mol ${direction}。${conclusion}`;
 }
 
 export default function ResultsPage() {
@@ -194,6 +221,9 @@ export default function ResultsPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportFormat, setReportFormat] = useState("markdown");
   const [reportContent, setReportContent] = useState("");
+  const [reportPreviewOpen, setReportPreviewOpen] = useState(false);
+  const [snapshotStatus, setSnapshotStatus] = useState("idle");
+  const reportPreviewRef = useRef(null);
   const [ligandModalOpen, setLigandModalOpen] = useState(false);
   const [ligandModalEntry, setLigandModalEntry] = useState(null);
   const [ligandInfo, setLigandInfo] = useState(null);
@@ -201,6 +231,9 @@ export default function ResultsPage() {
   const [ligandLoading, setLigandLoading] = useState(false);
   const [ligandError, setLigandError] = useState("");
   const [ligandCopied, setLigandCopied] = useState(false);
+  const apiBase = API_BASE;
+  const [currentLigand, setCurrentLigand] = useState(null);
+  const [currentLigandError, setCurrentLigandError] = useState("");
 
   const handleNewRun = () => {
     setLigandId(null);
@@ -215,13 +248,74 @@ export default function ResultsPage() {
   const generateReportText = (format) => {
     const ranking = results.ranking || [];
     const top3 = ranking.slice(0, 3);
-    const preset = results.preset || "Balanced";
-    const smiles = results.ligand_smiles || "N/A";
-    const createdAt = status?.created_at ? formatDate(status.created_at) : formatDate(new Date().toISOString());
+    const preset = currentRunMeta?.preset || results.preset || "Balanced";
+    const smiles = currentLigand?.smiles || results.ligand_smiles || "N/A";
+    const createdAt = currentRunMeta?.created_at
+      ? formatDate(currentRunMeta.created_at)
+      : formatDate(new Date().toISOString());
     const count = results.per_protein?.length || 0;
+    const selectedTarget = selectedResult?.protein_name || top3[0]?.protein_name || "N/A";
+    const ligandId = currentRunMeta?.ligand_id ? formatShortId(currentRunMeta.ligand_id) : "N/A";
+    const candidateScore = currentBestScore !== null ? `${formatScore(currentBestScore)} kcal/mol` : "N/A";
+    const referenceScore = historyBestEntry?.bestScore;
+    const referenceLabel = historyBestEntry
+      ? `${formatScore(historyBestEntry.bestScore)} kcal/mol (Run ${formatShortId(historyBestEntry.runId)})`
+      : "N/A";
+    const deltaValue = referenceScore !== undefined && referenceScore !== null && currentBestScore !== null
+      ? currentBestScore - referenceScore
+      : null;
+    const deltaLabel = deltaValue === null
+      ? "N/A"
+      : `${deltaValue < 0 ? "-" : "+"}${Math.abs(deltaValue).toFixed(2)} kcal/mol`;
+    const posePath = selectedResult?.pose_paths?.length ? selectedResult.pose_paths[0] : "";
+    const poseLink = posePath ? `${apiBase}/files/${posePath}` : "N/A";
+    const exportLink = `${apiBase}/runs/${runId}/export?fmt=zip`;
+    const insight = buildInsightText({
+      targetName: selectedTarget === "N/A" ? "" : selectedTarget,
+      currentBestScore,
+      referenceEntry: historyBestEntry
+    });
+
+    if (format === "patent") {
+      return `## 特許向けドッキング比較メモ
+
+### 示唆
+${insight}
+
+### 対象
+- 実行日時: ${createdAt}
+- Run ID: ${runId}
+- リガンド (SMILES): ${smiles}
+- リガンド ID: ${ligandId}
+- ターゲット: ${selectedTarget}
+- プリセット: ${preset}
+- ターゲット数: ${count}
+
+### 比較サマリー
+- 候補スコア: ${candidateScore}
+- 参照スコア: ${referenceLabel}
+- 差分: ${deltaLabel}
+
+### 結果サマリー（上位3件）
+${top3.length > 0 ? top3.map((r, i) =>
+        `${i + 1}. ${r.protein_name}: ${formatScore(r.best_score)} kcal/mol`
+      ).join('\n') : '結果なし'}
+
+### 図と添付物
+- 2D構造: (Ketcher 図を貼付)
+- 3Dポーズ: ${poseLink}
+- 実行結果 ZIP: ${exportLink}
+
+### 注意書き
+本結果は仮説生成のための参考値であり、実験的検証が必要です。
+スコアが低いほど結合親和性が高いことを示唆します。`;
+    }
 
     if (format === "markdown") {
       return `## ドッキングシミュレーション結果
+
+### 示唆
+${insight}
 
 ### 実行条件
 - 実行日時: ${createdAt}
@@ -242,6 +336,9 @@ ${top3.length > 0 ? top3.map((r, i) =>
 
     // Plain text format
     return `【ドッキングシミュレーション結果】
+
+[示唆]
+${insight}
 
 [実行条件]
 実行日時: ${createdAt}
@@ -265,6 +362,11 @@ ${top3.length > 0 ? top3.map((r, i) =>
     setReportOpen(true);
   };
 
+  const handleOpenReportPreview = () => {
+    setSnapshotStatus("loading");
+    setReportPreviewOpen(true);
+  };
+
   const handleFormatChange = (fmt) => {
     setReportFormat(fmt);
     setReportContent(generateReportText(fmt));
@@ -281,8 +383,136 @@ ${top3.length > 0 ? top3.map((r, i) =>
   };
 
   const handleDownload = () => {
-    const apiBase = import.meta.env.VITE_API_BASE || "/api";
     window.location.href = `${apiBase}/runs/${runId}/export?fmt=zip`;
+  };
+
+  const reportCss = `
+    @page { size: A4; margin: 12mm; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+      color: #1b1e23;
+      background: #f7f4ef;
+    }
+    .report-print {
+      padding: 12px;
+    }
+    .report-page {
+      background: #ffffff;
+      border: 1px solid rgba(27, 30, 35, 0.1);
+      border-radius: 12px;
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+    }
+    .report-title {
+      font-size: 22px;
+      margin: 0;
+      font-weight: 700;
+    }
+    .report-meta {
+      font-size: 12px;
+      color: #5b6270;
+      text-align: right;
+    }
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .report-card {
+      border: 1px solid rgba(27, 30, 35, 0.1);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .report-lead {
+      background: rgba(46, 125, 106, 0.08);
+      border-color: rgba(46, 125, 106, 0.2);
+    }
+    .report-card h4 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .report-table th,
+    .report-table td {
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(27, 30, 35, 0.12);
+      text-align: left;
+    }
+    .report-table th {
+      color: #5b6270;
+      font-weight: 600;
+      width: 40%;
+    }
+    .report-images {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .report-image {
+      border: 1px solid rgba(27, 30, 35, 0.1);
+      border-radius: 10px;
+      padding: 8px;
+      text-align: center;
+    }
+    .report-image img,
+    .report-image .structure-svg svg {
+      width: 100%;
+      height: auto;
+    }
+    .snapshot-stage {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+    }
+    .report-note {
+      font-size: 11px;
+      color: #5b6270;
+      line-height: 1.4;
+    }
+    .report-compact {
+      font-size: 12px;
+      color: #3a3f48;
+      line-height: 1.5;
+    }
+  `;
+
+  const handlePrintReport = () => {
+    if (!reportPreviewRef.current) return;
+    const reportMarkup = reportPreviewRef.current.innerHTML;
+    const printWindow = window.open("", "_blank", "width=980,height=720");
+    if (!printWindow) return;
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Docking Report</title>
+    <style>${reportCss}</style>
+  </head>
+  <body>
+    <div class="report-print">
+      ${reportMarkup}
+    </div>
+  </body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.close();
+    };
   };
 
   const handleOpenLigandModal = (entry) => {
@@ -497,6 +727,31 @@ ${top3.length > 0 ? top3.map((r, i) =>
     }
   }, [ligandInfo]);
 
+  useEffect(() => {
+    if (!currentRunMeta?.ligand_id) {
+      setCurrentLigand(null);
+      setCurrentLigandError("");
+      return undefined;
+    }
+    let active = true;
+    setCurrentLigandError("");
+    const loadLigand = async () => {
+      try {
+        const ligand = await fetchLigand(currentRunMeta.ligand_id);
+        if (!active) return;
+        setCurrentLigand(ligand);
+      } catch (err) {
+        if (!active) return;
+        setCurrentLigand(null);
+        setCurrentLigandError(err.message || "Failed to load ligand");
+      }
+    };
+    loadLigand();
+    return () => {
+      active = false;
+    };
+  }, [currentRunMeta?.ligand_id]);
+
   const receptorAtoms = useMemo(() => parsePdbqtAtoms(viewerData.receptor), [viewerData.receptor]);
   const poseAtoms = useMemo(
     () => parsePdbqtAtoms(viewerData.poses[selectedPoseIndex] || ""),
@@ -566,6 +821,20 @@ ${top3.length > 0 ? top3.map((r, i) =>
     if (!historyBestEntry) return "No scored runs for this target with the same settings yet.";
     return "";
   }, [currentBestScore, historyBestEntry]);
+  const summaryLine = useMemo(() => {
+    if (!selectedResult?.protein_name) return "";
+    if (currentBestScore === null) {
+      return `No score yet for ${selectedResult.protein_name}.`;
+    }
+    if (!historyBestEntry) {
+      return `Current best for ${selectedResult.protein_name}: ${formatScore(currentBestScore)} kcal/mol. No comparable runs yet.`;
+    }
+    const deltaValue = currentBestScore - historyBestEntry.bestScore;
+    const deltaLabel = deltaValue < 0
+      ? `${Math.abs(deltaValue).toFixed(2)} better`
+      : `${deltaValue.toFixed(2)} worse`;
+    return `Current best for ${selectedResult.protein_name}: ${formatScore(currentBestScore)} kcal/mol. Recent best ${formatScore(historyBestEntry.bestScore)} kcal/mol (Run ${formatShortId(historyBestEntry.runId)}), ${deltaLabel}.`;
+  }, [selectedResult, currentBestScore, historyBestEntry]);
   const showProgress =
     status && status.status && status.status !== "SUCCEEDED" && status.status !== "FAILED";
   const ligandText = ligandInfo?.smiles || derivedSmiles || ligandInfo?.molfile || "";
@@ -581,6 +850,28 @@ ${top3.length > 0 ? top3.map((r, i) =>
   const ligandRunMeta = ligandModalEntry
     ? `Run ${formatShortId(ligandModalEntry.runId)} · ${formatDate(ligandModalEntry.createdAt)}`
     : "";
+  const reportLigandName = currentLigand?.name
+    || (currentRunMeta?.ligand_id ? `Ligand ${formatShortId(currentRunMeta.ligand_id)}` : "Ligand");
+  const reportSmiles = currentLigand?.smiles || results.ligand_smiles || "";
+  const reportMolfile = currentLigand?.molfile || "";
+  const reportCreatedAt = currentRunMeta?.created_at ? formatDateTime(currentRunMeta.created_at) : "-";
+  const reportTargetName = selectedResult?.protein_name || "N/A";
+  const reportPreset = currentRunMeta?.preset || results.preset || "Balanced";
+  const reportOptions = formatRunOptions(currentRunMeta?.options);
+  const reportTop3 = (results.ranking || []).slice(0, 3);
+  const reportCandidateScore = currentBestScore !== null ? `${formatScore(currentBestScore)} kcal/mol` : "N/A";
+  const reportReferenceScore = historyBestEntry
+    ? `${formatScore(historyBestEntry.bestScore)} kcal/mol (Run ${formatShortId(historyBestEntry.runId)})`
+    : "N/A";
+  const reportDelta = historyBestEntry && currentBestScore !== null
+    ? `${currentBestScore - historyBestEntry.bestScore < 0 ? "-" : "+"}${Math.abs(currentBestScore - historyBestEntry.bestScore).toFixed(2)} kcal/mol`
+    : "N/A";
+  const reportPoseText = viewerData.poses[safePoseIndex] || "";
+  const reportInsight = buildInsightText({
+    targetName: reportTargetName === "N/A" ? "" : reportTargetName,
+    currentBestScore,
+    referenceEntry: historyBestEntry
+  });
 
   if (!runId) {
     return (
@@ -606,6 +897,14 @@ ${top3.length > 0 ? top3.map((r, i) =>
             disabled={!results.ranking?.length}
           >
             <CopyIcon size={16} /> Copy Report
+          </button>
+          <button
+            onClick={handleOpenReportPreview}
+            className="button-secondary"
+            disabled={!results.ranking?.length}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <FileTextIcon size={16} /> Report Preview
           </button>
           <button
             onClick={handleDownload}
@@ -641,12 +940,18 @@ ${top3.length > 0 ? top3.map((r, i) =>
         </div>
       )}
 
+      {summaryLine && (
+        <div className="summary-banner">
+          <p>{summaryLine}</p>
+        </div>
+      )}
+
       <div className="results-layout">
         <aside className="results-sidebar">
           <div className="overview-card history-card">
             <div className="history-header">
               <div>
-                <p className="muted">History (same target + settings)</p>
+                <p className="muted">Reference comparison (same target + settings)</p>
                 <h3>Energy diagram</h3>
                 {runConditions && <p className="muted">{runConditions}</p>}
                 {targetLabel && <p className="muted">{targetLabel}</p>}
@@ -702,7 +1007,7 @@ ${top3.length > 0 ? top3.map((r, i) =>
                 </div>
                 <div className="history-recent">
                   <div className="history-recent-header">
-                    <h4>Recent runs</h4>
+                    <h4>Reference runs</h4>
                     <span className="muted">Same target + settings</span>
                   </div>
                   {historyRows.length === 0 ? (
@@ -1028,6 +1333,13 @@ ${top3.length > 0 ? top3.map((r, i) =>
             </button>
             <button
               type="button"
+              className={reportFormat === "patent" ? "active" : ""}
+              onClick={() => handleFormatChange("patent")}
+            >
+              Patent Note
+            </button>
+            <button
+              type="button"
               className={reportFormat === "text" ? "active" : ""}
               onClick={() => handleFormatChange("text")}
             >
@@ -1050,6 +1362,135 @@ ${top3.length > 0 ? top3.map((r, i) =>
           >
             {copied ? <><CheckIcon size={16} /> Copied!</> : "Copy to Clipboard"}
           </button>
+        </div>
+      </Modal>
+      <Modal
+        title="Report Preview"
+        isOpen={reportPreviewOpen}
+        onClose={() => setReportPreviewOpen(false)}
+        className="report-modal"
+      >
+        <div className="report-toolbar">
+          <p className="muted report-toolbar-note">
+            1ページに収まるように調整されています。必要に応じて追記してください。
+          </p>
+          <div className="report-toolbar-actions">
+            <button
+              className="button-secondary"
+              onClick={handlePrintReport}
+              disabled={snapshotStatus === "loading"}
+            >
+              Print / Save PDF
+            </button>
+          </div>
+        </div>
+        <div className="report-preview" ref={reportPreviewRef}>
+          <div className="report-page">
+            <div className="report-header">
+              <div>
+                <h3 className="report-title">ドッキング比較レポート</h3>
+                <p className="report-compact">候補化合物の相対比較を目的とした簡易レポート</p>
+              </div>
+              <div className="report-meta">
+                <div>作成: {reportCreatedAt}</div>
+                <div>Run ID: {runId}</div>
+              </div>
+            </div>
+            <div className="report-card report-lead">
+              <h4>示唆</h4>
+              <p className="report-compact">{reportInsight}</p>
+            </div>
+            <div className="report-grid">
+              <div className="report-card">
+                <h4>リガンド情報</h4>
+                <div className="report-images">
+                  <div className="report-image">
+                    <Structure2D smiles={reportSmiles} molfile={reportMolfile} width={220} height={160} />
+                  </div>
+                  <div className="report-image report-compact">
+                    <p><strong>{reportLigandName}</strong></p>
+                    <p>SMILES: {reportSmiles || "N/A"}</p>
+                    {currentLigandError && <p className="muted">{currentLigandError}</p>}
+                  </div>
+                </div>
+              </div>
+              <div className="report-card">
+                <h4>比較サマリー</h4>
+                <table className="report-table">
+                  <tbody>
+                    <tr>
+                      <th>ターゲット</th>
+                      <td>{reportTargetName}</td>
+                    </tr>
+                    <tr>
+                      <th>候補スコア</th>
+                      <td>{reportCandidateScore}</td>
+                    </tr>
+                    <tr>
+                      <th>参照スコア</th>
+                      <td>{reportReferenceScore}</td>
+                    </tr>
+                    <tr>
+                      <th>差分</th>
+                      <td>{reportDelta}</td>
+                    </tr>
+                    <tr>
+                      <th>プリセット</th>
+                      <td>{reportPreset}</td>
+                    </tr>
+                    <tr>
+                      <th>条件</th>
+                      <td>{reportOptions || "Default"}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="report-card">
+                <h4>3Dポーズ（スナップショット）</h4>
+                <div className="report-image">
+                  <PoseSnapshot
+                    receptorText={viewerData.receptor}
+                    poseText={reportPoseText}
+                    width={240}
+                    height={180}
+                    onStatusChange={setSnapshotStatus}
+                  />
+                </div>
+              </div>
+              <div className="report-card">
+                <h4>上位スコア（Top 3）</h4>
+                <table className="report-table">
+                  <thead>
+                    <tr>
+                      <th>Target</th>
+                      <th>Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportTop3.length === 0 ? (
+                      <tr>
+                        <td colSpan={2}>No results yet.</td>
+                      </tr>
+                    ) : (
+                      reportTop3.map((entry) => (
+                        <tr key={entry.protein_id}>
+                          <td>{entry.protein_name}</td>
+                          <td>{formatScore(entry.best_score)} kcal/mol</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="report-card">
+              <h4>注意書き</h4>
+              <p className="report-note">
+                本結果は in silico ドッキング計算に基づく参考値であり、実験的検証が必要です。
+                同一条件下での相対比較として示唆を得る目的で使用しています。
+              </p>
+            </div>
+          </div>
         </div>
       </Modal>
     </section>

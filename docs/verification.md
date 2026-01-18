@@ -372,7 +372,7 @@ curl -I -X OPTIONS \
 
 1. **デプロイ準備**: `docs/deploy.md` を参照
 2. **Agent Skills**: `ドキュメント更新して` で自動更新
-3. **リリース**: `git tag v0.1.0 && git push origin v0.1.0`
+3. **リリース**: `git tag v0.9.0 && git push origin v0.9.0`
 
 ## 関連ドキュメント
 

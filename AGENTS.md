@@ -18,6 +18,7 @@
 ## Parallel Development (git worktree)
 - Use `git worktree` for parallel work; branch from `origin/develop`.
 - Before starting work, run `git fetch origin --prune`.
+- Create the worktree before making changes, and open each worktree in a separate VS Code window.
 - If work maps to a roadmap item, move it to "In Progress" and add a short owner/branch/worktree/started note.
 - Each worktree must have its own `.env`; set a unique `EXTERNAL_PORT` and `COMPOSE_PROJECT_NAME`.
 - Do not expose DB/Redis ports unless needed; if you do, set unique `DEV_DB_PORT` and `DEV_REDIS_PORT`.

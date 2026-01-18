@@ -1579,6 +1579,41 @@ textarea {
   gap: 10px;
 }
 
+.report-ligand-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.report-ligand-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  display: grid;
+  gap: 6px;
+}
+
+.report-ligand-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.report-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: rgba(46, 125, 106, 0.12);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .report-image {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1658,6 +1693,10 @@ textarea {
   }
 
   .report-images {
+    grid-template-columns: 1fr;
+  }
+
+  .report-ligand-grid {
     grid-template-columns: 1fr;
   }
 

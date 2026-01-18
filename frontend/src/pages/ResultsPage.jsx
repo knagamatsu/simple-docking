@@ -173,7 +173,7 @@ function formatRunOptions(options) {
   return parts.join(" · ");
 }
 
-function buildInsightText({ targetName, currentBestScore, referenceEntry }) {
+function buildInsightText({ targetName, currentBestScore, referenceEntry, referenceLabel }) {
   if (!targetName) return "ターゲットが選択されていないため、示唆を生成できません。";
   if (currentBestScore === null) {
     return `${targetName} のスコアがまだ得られていないため、示唆は生成されていません。`;
@@ -184,11 +184,11 @@ function buildInsightText({ targetName, currentBestScore, referenceEntry }) {
   const deltaValue = currentBestScore - referenceEntry.bestScore;
   const deltaLabel = Math.abs(deltaValue).toFixed(2);
   const direction = deltaValue < 0 ? "低い" : "高い";
-  const referenceLabel = `Run ${formatShortId(referenceEntry.runId)}`;
+  const resolvedReferenceLabel = referenceLabel || `Run ${formatShortId(referenceEntry.runId)}`;
   const conclusion = deltaValue < 0
     ? "同一条件下で参照より良好な結合傾向が示唆されます。"
     : "同一条件下では参照と同等または弱い結合傾向が示唆されます。";
-  return `${targetName} に対して、候補は ${formatScore(currentBestScore)} kcal/mol、参照（${referenceLabel}）は ${formatScore(referenceEntry.bestScore)} kcal/mol で、候補が ${deltaLabel} kcal/mol ${direction}。${conclusion}`;
+  return `${targetName} に対して、候補は ${formatScore(currentBestScore)} kcal/mol、参照（${resolvedReferenceLabel}）は ${formatScore(referenceEntry.bestScore)} kcal/mol で、候補が ${deltaLabel} kcal/mol ${direction}。${conclusion}`;
 }
 
 export default function ResultsPage() {
@@ -234,6 +234,9 @@ export default function ResultsPage() {
   const apiBase = API_BASE;
   const [currentLigand, setCurrentLigand] = useState(null);
   const [currentLigandError, setCurrentLigandError] = useState("");
+  const [referenceLigand, setReferenceLigand] = useState(null);
+  const [referenceLigandError, setReferenceLigandError] = useState("");
+  const [referenceDerivedSmiles, setReferenceDerivedSmiles] = useState("");
 
   const handleNewRun = () => {
     setLigandId(null);
@@ -256,11 +259,30 @@ export default function ResultsPage() {
     const count = results.per_protein?.length || 0;
     const selectedTarget = selectedResult?.protein_name || top3[0]?.protein_name || "N/A";
     const ligandId = currentRunMeta?.ligand_id ? formatShortId(currentRunMeta.ligand_id) : "N/A";
+    const ligandName = currentLigand?.name
+      || (currentRunMeta?.ligand_id ? `Ligand ${formatShortId(currentRunMeta.ligand_id)}` : "N/A");
     const candidateScore = currentBestScore !== null ? `${formatScore(currentBestScore)} kcal/mol` : "N/A";
     const referenceScore = historyBestEntry?.bestScore;
-    const referenceLabel = historyBestEntry
-      ? `${formatScore(historyBestEntry.bestScore)} kcal/mol (Run ${formatShortId(historyBestEntry.runId)})`
+    const referenceRunLabel = historyBestEntry
+      ? `Run ${formatShortId(historyBestEntry.runId)}`
       : "N/A";
+    const referenceLigandLabel = historyBestEntry
+      ? (referenceLigand?.name
+        || (historyBestEntry.ligandId ? `Ligand ${formatShortId(historyBestEntry.ligandId)}` : "N/A"))
+      : "N/A";
+    const referenceScoreLabel = historyBestEntry
+      ? `${formatScore(historyBestEntry.bestScore)} kcal/mol`
+      : "N/A";
+    const referenceSmilesLabel = referenceSmiles || "N/A";
+    const referenceSummary = historyBestEntry
+      ? `${referenceScoreLabel} (${referenceRunLabel})`
+      : "N/A";
+    const referenceInsightLabel = historyBestEntry
+      ? [
+        referenceLigandLabel !== "N/A" ? referenceLigandLabel : "",
+        referenceRunLabel !== "N/A" ? referenceRunLabel : ""
+      ].filter(Boolean).join(" / ")
+      : "";
     const deltaValue = referenceScore !== undefined && referenceScore !== null && currentBestScore !== null
       ? currentBestScore - referenceScore
       : null;
@@ -273,7 +295,8 @@ export default function ResultsPage() {
     const insight = buildInsightText({
       targetName: selectedTarget === "N/A" ? "" : selectedTarget,
       currentBestScore,
-      referenceEntry: historyBestEntry
+      referenceEntry: historyBestEntry,
+      referenceLabel: referenceInsightLabel
     });
 
     if (format === "patent") {
@@ -285,15 +308,18 @@ ${insight}
 ### 対象
 - 実行日時: ${createdAt}
 - Run ID: ${runId}
-- リガンド (SMILES): ${smiles}
-- リガンド ID: ${ligandId}
+- 候補リガンド: ${ligandName} (ID: ${ligandId})
+- 候補SMILES: ${smiles}
+- 参照リガンド: ${referenceLigandLabel}
+- 参照SMILES: ${referenceSmilesLabel}
+- 参照 Run: ${referenceRunLabel}
 - ターゲット: ${selectedTarget}
 - プリセット: ${preset}
 - ターゲット数: ${count}
 
 ### 比較サマリー
 - 候補スコア: ${candidateScore}
-- 参照スコア: ${referenceLabel}
+- 参照スコア: ${referenceSummary}
 - 差分: ${deltaLabel}
 
 ### 結果サマリー（上位3件）
@@ -302,7 +328,7 @@ ${top3.length > 0 ? top3.map((r, i) =>
       ).join('\n') : '結果なし'}
 
 ### 図と添付物
-- 2D構造: (Ketcher 図を貼付)
+- 2D構造: (候補/参照の Ketcher 図を貼付)
 - 3Dポーズ: ${poseLink}
 - 実行結果 ZIP: ${exportLink}
 
@@ -320,9 +346,16 @@ ${insight}
 ### 実行条件
 - 実行日時: ${createdAt}
 - Run ID: ${runId}
-- リガンド (SMILES): ${smiles}
+- 候補リガンド: ${ligandName} (ID: ${ligandId})
+- 候補SMILES: ${smiles}
 - プリセット: ${preset}
 - ターゲット数: ${count}
+
+### 参照化合物
+- 参照リガンド: ${referenceLigandLabel}
+- 参照SMILES: ${referenceSmilesLabel}
+- 参照 Run: ${referenceRunLabel}
+- 参照スコア: ${referenceSummary}
 
 ### 結果サマリー（上位3件）
 ${top3.length > 0 ? top3.map((r, i) =>
@@ -343,9 +376,16 @@ ${insight}
 [実行条件]
 実行日時: ${createdAt}
 Run ID: ${runId}
-リガンド: ${smiles}
+候補リガンド: ${ligandName} (ID: ${ligandId})
+候補SMILES: ${smiles}
 プリセット: ${preset}
 ターゲット数: ${count}
+
+[参照化合物]
+参照リガンド: ${referenceLigandLabel}
+参照SMILES: ${referenceSmilesLabel}
+参照 Run: ${referenceRunLabel}
+参照スコア: ${referenceSummary}
 
 [結果サマリー]
 ${top3.length > 0 ? top3.map((r, i) =>
@@ -460,11 +500,49 @@ ${top3.length > 0 ? top3.map((r, i) =>
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
     }
+    .report-ligand-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .report-ligand-card {
+      border: 1px solid rgba(27, 30, 35, 0.1);
+      border-radius: 10px;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.95);
+    }
+    .report-ligand-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #3a3f48;
+    }
+    .report-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 999px;
+      padding: 2px 6px;
+      background: rgba(46, 125, 106, 0.12);
+      color: #2e7d6a;
+      font-size: 11px;
+      font-weight: 600;
+    }
     .report-image {
       border: 1px solid rgba(27, 30, 35, 0.1);
       border-radius: 10px;
       padding: 8px;
       text-align: center;
+    }
+    .structure-fallback {
+      border: 1px dashed rgba(27, 30, 35, 0.2);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 12px;
+      color: #5b6270;
     }
     .report-image img,
     .report-image .structure-svg svg {
@@ -781,6 +859,43 @@ ${top3.length > 0 ? top3.map((r, i) =>
       scored[0]
     );
   }, [historyRuns]);
+  useEffect(() => {
+    if (!historyBestEntry?.ligandId) {
+      setReferenceLigand(null);
+      setReferenceLigandError("");
+      return undefined;
+    }
+    let active = true;
+    setReferenceLigand(null);
+    setReferenceLigandError("");
+    const loadReferenceLigand = async () => {
+      try {
+        const ligand = await fetchLigand(historyBestEntry.ligandId);
+        if (!active) return;
+        setReferenceLigand(ligand);
+      } catch (err) {
+        if (!active) return;
+        setReferenceLigand(null);
+        setReferenceLigandError(err.message || "Failed to load reference ligand");
+      }
+    };
+    loadReferenceLigand();
+    return () => {
+      active = false;
+    };
+  }, [historyBestEntry?.ligandId]);
+  useEffect(() => {
+    if (!referenceLigand || referenceLigand.smiles || !referenceLigand.molfile) {
+      setReferenceDerivedSmiles("");
+      return;
+    }
+    try {
+      const molecule = OCL.Molecule.fromMolfile(referenceLigand.molfile);
+      setReferenceDerivedSmiles(molecule.toSmiles());
+    } catch (err) {
+      setReferenceDerivedSmiles("");
+    }
+  }, [referenceLigand]);
   const historyDelta = useMemo(() => {
     if (!historyBestEntry || currentBestScore === null) return null;
     return currentBestScore - historyBestEntry.bestScore;
@@ -854,15 +969,35 @@ ${top3.length > 0 ? top3.map((r, i) =>
     || (currentRunMeta?.ligand_id ? `Ligand ${formatShortId(currentRunMeta.ligand_id)}` : "Ligand");
   const reportSmiles = currentLigand?.smiles || results.ligand_smiles || "";
   const reportMolfile = currentLigand?.molfile || "";
+  const referenceSmiles = referenceLigand?.smiles || referenceDerivedSmiles || "";
+  const referenceMolfile = referenceLigand?.molfile || "";
+  const referenceRunLabel = historyBestEntry ? `Run ${formatShortId(historyBestEntry.runId)}` : "";
+  const referenceLigandName = historyBestEntry
+    ? (referenceLigand?.name
+      || (historyBestEntry.ligandId ? `Ligand ${formatShortId(historyBestEntry.ligandId)}` : "Reference"))
+    : "N/A";
+  const referenceScoreLabel = historyBestEntry
+    ? `${formatScore(historyBestEntry.bestScore)} kcal/mol`
+    : "N/A";
+  const referenceDisplayLabel = historyBestEntry
+    ? [referenceLigandName, referenceRunLabel].filter(Boolean).join(" / ")
+    : "";
   const reportCreatedAt = currentRunMeta?.created_at ? formatDateTime(currentRunMeta.created_at) : "-";
+  const reportRunLabel = runId ? `Run ${formatShortId(runId)}` : "N/A";
   const reportTargetName = selectedResult?.protein_name || "N/A";
   const reportPreset = currentRunMeta?.preset || results.preset || "Balanced";
   const reportOptions = formatRunOptions(currentRunMeta?.options);
   const reportTop3 = (results.ranking || []).slice(0, 3);
   const reportCandidateScore = currentBestScore !== null ? `${formatScore(currentBestScore)} kcal/mol` : "N/A";
   const reportReferenceScore = historyBestEntry
-    ? `${formatScore(historyBestEntry.bestScore)} kcal/mol (Run ${formatShortId(historyBestEntry.runId)})`
+    ? `${referenceScoreLabel} (${referenceRunLabel})`
     : "N/A";
+  const reportReferenceLigand = historyBestEntry
+    ? `${referenceLigandName}${referenceRunLabel ? ` (${referenceRunLabel})` : ""}`
+    : "N/A";
+  const reportReferenceScoreValue = historyBestEntry ? referenceScoreLabel : "N/A";
+  const reportReferenceRun = historyBestEntry ? referenceRunLabel : "N/A";
+  const reportReferenceSmiles = referenceSmiles || "N/A";
   const reportDelta = historyBestEntry && currentBestScore !== null
     ? `${currentBestScore - historyBestEntry.bestScore < 0 ? "-" : "+"}${Math.abs(currentBestScore - historyBestEntry.bestScore).toFixed(2)} kcal/mol`
     : "N/A";
@@ -870,7 +1005,8 @@ ${top3.length > 0 ? top3.map((r, i) =>
   const reportInsight = buildInsightText({
     targetName: reportTargetName === "N/A" ? "" : reportTargetName,
     currentBestScore,
-    referenceEntry: historyBestEntry
+    referenceEntry: historyBestEntry,
+    referenceLabel: referenceDisplayLabel
   });
 
   if (!runId) {
@@ -1402,15 +1538,48 @@ ${top3.length > 0 ? top3.map((r, i) =>
             </div>
             <div className="report-grid">
               <div className="report-card">
-                <h4>リガンド情報</h4>
-                <div className="report-images">
-                  <div className="report-image">
-                    <Structure2D smiles={reportSmiles} molfile={reportMolfile} width={220} height={160} />
-                  </div>
-                  <div className="report-image report-compact">
-                    <p><strong>{reportLigandName}</strong></p>
-                    <p>SMILES: {reportSmiles || "N/A"}</p>
+                <h4>候補/参照リガンド</h4>
+                <div className="report-ligand-grid">
+                  <div className="report-ligand-card">
+                    <div className="report-ligand-header">
+                      <span className="report-tag">候補</span>
+                      <span className="report-compact">{reportCandidateScore}</span>
+                    </div>
+                    <div className="report-image">
+                      <Structure2D smiles={reportSmiles} molfile={reportMolfile} width={220} height={160} />
+                    </div>
+                    <p className="report-compact"><strong>{reportLigandName}</strong></p>
+                    <p className="report-compact">Run: {reportRunLabel}</p>
+                    <p className="report-compact">SMILES: {reportSmiles || "N/A"}</p>
                     {currentLigandError && <p className="muted">{currentLigandError}</p>}
+                  </div>
+                  <div className="report-ligand-card">
+                    <div className="report-ligand-header">
+                      <span className="report-tag">参照</span>
+                      <span className="report-compact">{reportReferenceScoreValue}</span>
+                    </div>
+                    <div className="report-image">
+                      {historyBestEntry ? (
+                        <Structure2D
+                          smiles={referenceSmiles}
+                          molfile={referenceMolfile}
+                          width={220}
+                          height={160}
+                        />
+                      ) : (
+                        <div className="structure-fallback">参照ランなし</div>
+                      )}
+                    </div>
+                    {historyBestEntry ? (
+                      <>
+                        <p className="report-compact"><strong>{referenceLigandName}</strong></p>
+                        <p className="report-compact">Run: {reportReferenceRun}</p>
+                        <p className="report-compact">SMILES: {reportReferenceSmiles}</p>
+                        {referenceLigandError && <p className="muted">{referenceLigandError}</p>}
+                      </>
+                    ) : (
+                      <p className="report-compact">参照ランがまだありません。</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1425,6 +1594,10 @@ ${top3.length > 0 ? top3.map((r, i) =>
                     <tr>
                       <th>候補スコア</th>
                       <td>{reportCandidateScore}</td>
+                    </tr>
+                    <tr>
+                      <th>参照リガンド</th>
+                      <td>{reportReferenceLigand}</td>
                     </tr>
                     <tr>
                       <th>参照スコア</th>

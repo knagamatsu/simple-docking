@@ -1389,7 +1389,7 @@ ${top3.length > 0 ? top3.map((r, i) =>
             <div className="report-header">
               <div>
                 <h3 className="report-title">ドッキング比較レポート</h3>
-                <p className="report-compact">候補化合物の相対比較を目的とした簡易レポート</p>
+                <p className="report-compact">候補化合物の相対比較レポート</p>
               </div>
               <div className="report-meta">
                 <div>作成: {reportCreatedAt}</div>
@@ -1446,7 +1446,7 @@ ${top3.length > 0 ? top3.map((r, i) =>
                 </table>
               </div>
               <div className="report-card">
-                <h4>3Dポーズ（スナップショット）</h4>
+                <h4>3Dポーズ</h4>
                 <div className="report-image">
                   <PoseSnapshot
                     receptorText={viewerData.receptor}
@@ -1458,12 +1458,12 @@ ${top3.length > 0 ? top3.map((r, i) =>
                 </div>
               </div>
               <div className="report-card">
-                <h4>上位スコア（Top 3）</h4>
+                <h4>上位3件</h4>
                 <table className="report-table">
                   <thead>
                     <tr>
-                      <th>Target</th>
-                      <th>Score</th>
+                      <th>ターゲット</th>
+                      <th>スコア</th>
                     </tr>
                   </thead>
                   <tbody>

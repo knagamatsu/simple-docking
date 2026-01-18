@@ -20,6 +20,9 @@ dist/
 # Logs
 *.log
 
+# Worktrees
+.worktrees/
+
 # Editor
 .DS_Store
 .vscode/

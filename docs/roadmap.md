@@ -218,7 +218,7 @@
 #### 特許向けアウトプット
 - [x] 特許添付用ミニレポート（HTMLプレビュー + PDF出力、2D/3D画像付き）
 - [x] 参照化合物の2D構造/スコアをレポートに並列表示（owner: codex, branch: feature/reference-report, worktree: .worktrees/reference-report, started: 2026-01-18）
-- [ ] 再現性ログ（パラメータ/バージョン/入力の自動記録）
+- [x] 再現性ログ（パラメータ/バージョン/入力の自動記録）
 - [x] 注意書きテンプレ（参考情報であることの明示）
 
 #### 安定性とガイド

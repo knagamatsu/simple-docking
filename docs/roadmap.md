@@ -225,10 +225,8 @@
 - [ ] 参照用の既存化合物セット（最低限の比較基準）
 
 #### インテグレーション・物性計算
-- [ ] RDKit 物性計算（LogP, TPSA, Lipinski's Rule）
-- [ ] ChEMBL 類似化合物検索・活性データ連携
-
-> **In Progress**: `feature/rdkit-chembl-integration` / worktree: `simple-docking-integrations` / 2026-01-18
+- [x] RDKit 物性計算（LogP, TPSA, Lipinski's Rule）
+- [x] ChEMBL 類似化合物検索・活性データ連携
 
 ## 📋 計画中 (Planned)
 

@@ -38,6 +38,16 @@ export async function fetchLigand(ligandId) {
   return response.json();
 }
 
+export async function fetchLigandProperties(ligandId) {
+  const response = await request(`/ligands/${ligandId}/properties`);
+  return response.json();
+}
+
+export async function fetchLigandChembl(ligandId, threshold = 70) {
+  const response = await request(`/ligands/${ligandId}/chembl?threshold=${threshold}`);
+  return response.json();
+}
+
 export async function fetchProteins({ category, q } = {}) {
   const params = new URLSearchParams();
   if (category) params.set("category", category);

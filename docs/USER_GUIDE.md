@@ -51,7 +51,7 @@ Simple Docking Dashboard は、化合物（リガンド）とタンパク質（�
 
 - **OS**: Linux（Ubuntu、Fedora など）、macOS、Windows（WSL2 + Docker Desktop）
 - **ソフトウェア**: Docker 20.10+、Docker Compose V2+
-- **Git**: 手動インストール時に必要（自動インストーラー利用時は不要）
+- **Git**: 推奨（更新や `git pull` に使用）
 - **ブラウザ**: Chrome、Firefox、Safari など
 - **メモリ**: 4GB 以上推奨
 - **ディスク**: 5GB 以上の空き容量
@@ -60,53 +60,17 @@ Simple Docking Dashboard は、化合物（リガンド）とタンパク質（�
 
 ## インストール
 
-### 方法1: 自動インストーラー（推奨）
+### 方法1: Git でインストール（推奨）
 
-最も簡単な方法です。
+Git を使うとアップデートが簡単です。
 
-#### Linux / macOS
+#### ステップ1: 前提ソフトのインストール
 
-1. ターミナルを開く
-
-2. 以下のコマンドを実行：
-
-```bash
-curl -fsSL https://github.com/knagamatsu/simple-docking/releases/latest/download/simple-docking-installer.sh | bash
-```
-
-3. 自動的にインストールと起動が完了します
-
-4. ブラウザで http://localhost:8090/simple-docking を開く
-
----
-
-### 方法2: 手動インストール
-
-Docker に慣れている場合の手順です。
-
-#### ステップ1: Docker のインストール
-
-**Ubuntu**:
-```bash
-sudo apt update
-sudo apt install docker.io docker-compose-v2
-```
-
-**Fedora**:
-```bash
-sudo dnf install docker docker-compose
-```
-
-**macOS**:
-- [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop) をインストール
-
-**Windows (WSL2)**:
-1. PowerShell（管理者）で WSL2 を有効化（未導入の場合）
-   ```powershell
-   wsl --install -d Ubuntu
-   ```
-2. Docker Desktop for Windows をインストールし、WSL2 エンジンと Ubuntu 連携を有効化
-3. Ubuntu (WSL2) で `docker version` と `docker compose version` を確認
+- Git（Linux）: https://git-scm.com/download/linux
+- Docker Engine（Ubuntu）: https://docs.docker.com/engine/install/ubuntu/
+- Docker Engine（その他 Linux）: https://docs.docker.com/engine/install/
+- Docker Compose（Linux）: https://docs.docker.com/compose/install/
+- macOS / Windows: Docker Desktop https://www.docker.com/products/docker-desktop
 
 #### ステップ2: リポジトリの取得
 
@@ -137,6 +101,22 @@ docker compose up -d
 （WSL2 の場合も Windows 側のブラウザで同じ URL にアクセスできます）
 
 ---
+
+### 方法2: Git なし（ZIP）
+
+Git を使わない場合は ZIP で取得します（Docker / Compose は必要です）。
+
+1. GitHub Releases から ZIP をダウンロードして展開  
+   https://github.com/knagamatsu/simple-docking/releases
+2. 展開したフォルダに移動
+3. 起動
+   ```bash
+   ./start.sh
+   ```
+   もしくは：
+   ```bash
+   docker compose up -d
+   ```
 
 ### インストール確認
 

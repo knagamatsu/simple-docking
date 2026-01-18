@@ -38,6 +38,16 @@ export async function fetchLigand(ligandId) {
   return response.json();
 }
 
+export async function fetchLigandProperties(ligandId) {
+  const response = await request(`/ligands/${ligandId}/properties`);
+  return response.json();
+}
+
+export async function fetchLigandChembl(ligandId, threshold = 70) {
+  const response = await request(`/ligands/${ligandId}/chembl?threshold=${threshold}`);
+  return response.json();
+}
+
 export async function fetchProteins({ category, q } = {}) {
   const params = new URLSearchParams();
   if (category) params.set("category", category);
@@ -46,8 +56,32 @@ export async function fetchProteins({ category, q } = {}) {
   return response.json();
 }
 
+export async function importProteinFromPdb(payload) {
+  const response = await request("/proteins/import", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return response.json();
+}
+
+export async function pasteProtein(payload) {
+  const response = await request("/proteins/paste", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return response.json();
+}
+
 export async function createRun(payload) {
   const response = await request("/runs", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  return response.json();
+}
+
+export async function createBatch(payload) {
+  const response = await request("/batches", {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -68,6 +102,23 @@ export async function listRuns(status) {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   const response = await request(`/runs?${params.toString()}`);
+  return response.json();
+}
+
+export async function listBatches(status) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  const response = await request(`/batches?${params.toString()}`);
+  return response.json();
+}
+
+export async function fetchBatchStatus(batchId) {
+  const response = await request(`/batches/${batchId}/status`);
+  return response.json();
+}
+
+export async function fetchBatchResults(batchId) {
+  const response = await request(`/batches/${batchId}/results`);
   return response.json();
 }
 

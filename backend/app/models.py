@@ -58,12 +58,23 @@ class Protein(Base):
     status = Column(String, default="READY", nullable=False)
 
 
+class Batch(Base):
+    __tablename__ = "batches"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    name = Column(String, nullable=True)
+    preset = Column(String, nullable=False)
+    options_json = Column(_json_type(), nullable=True)
+
+
 class Run(Base):
     __tablename__ = "runs"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid4()))
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     ligand_id = Column(String, ForeignKey("ligands.id"), nullable=False)
+    batch_id = Column(String, ForeignKey("batches.id"), nullable=True)
     preset = Column(String, nullable=False)
     options_json = Column(_json_type(), nullable=True)
     status = Column(String, default="PENDING", nullable=False)

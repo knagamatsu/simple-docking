@@ -33,6 +33,20 @@ class ProteinOut(BaseModel):
     source_id: Optional[str] = None
 
 
+class ProteinImportRequest(BaseModel):
+    pdb_id: str
+    name: Optional[str] = None
+    category: Optional[str] = None
+    organism: Optional[str] = None
+
+
+class ProteinPasteRequest(BaseModel):
+    name: Optional[str] = None
+    pdb_text: str
+    category: Optional[str] = None
+    organism: Optional[str] = None
+
+
 class RunCreate(BaseModel):
     ligand_id: str
     protein_ids: List[str]
@@ -52,6 +66,66 @@ class RunStatusResponse(BaseModel):
     running: List[str]
 
 
+class BatchCreate(BaseModel):
+    name: Optional[str] = None
+    protein_ids: List[str]
+    preset: str
+    options: Optional[dict[str, Any]] = None
+    format: Optional[str] = None
+    text: Optional[str] = None
+    ligands: Optional[List[LigandCreate]] = None
+
+
+class BatchCreateResponse(BaseModel):
+    batch_id: str
+    run_count: int
+    ligand_count: int
+
+
+class BatchSummary(BaseModel):
+    id: str
+    created_at: datetime
+    name: Optional[str] = None
+    preset: str
+    status: str
+    total_runs: int
+    done_runs: int
+    failed_runs: int
+    total_tasks: int
+    done_tasks: int
+    failed_tasks: int
+
+
+class BatchStatusResponse(BaseModel):
+    status: str
+    total_runs: int
+    done_runs: int
+    failed_runs: int
+    total_tasks: int
+    done_tasks: int
+    failed_tasks: int
+
+
+class BatchRunEntry(BaseModel):
+    run_id: str
+    ligand_id: str
+    ligand_name: Optional[str] = None
+    best_score: Optional[float] = None
+    best_protein: Optional[str] = None
+    status: str
+    total_tasks: int
+    done_tasks: int
+    failed_tasks: int
+
+
+class BatchResultsResponse(BaseModel):
+    batch_id: str
+    name: Optional[str] = None
+    preset: str
+    status: BatchStatusResponse
+    runs: List[BatchRunEntry]
+
+
 class RunResultEntry(BaseModel):
     protein_id: str
     protein_name: str
@@ -61,6 +135,7 @@ class RunResultEntry(BaseModel):
     status: str
     error: Optional[str] = None
     receptor_pdbqt_path: Optional[str] = None
+    metrics: Optional[dict[str, Any]] = None
 
 
 class RunResultsResponse(BaseModel):
@@ -73,3 +148,49 @@ class TaskOut(BaseModel):
     status: str
     error: Optional[str] = None
     log_path: Optional[str] = None
+
+
+class LipinskiRule(BaseModel):
+    mw_ok: bool = Field(description="MW <= 500")
+    logp_ok: bool = Field(description="LogP <= 5")
+    hbd_ok: bool = Field(description="HBD <= 5")
+    hba_ok: bool = Field(description="HBA <= 10")
+    passes: bool = Field(description="All rules pass")
+    violations: int = Field(description="Number of violations")
+
+
+class MolecularProperties(BaseModel):
+    smiles: str
+    molecular_weight: float
+    logp: float
+    tpsa: float
+    hbd: int = Field(description="Hydrogen bond donors")
+    hba: int = Field(description="Hydrogen bond acceptors")
+    rotatable_bonds: int
+    rings: int
+    heavy_atoms: int
+    lipinski: LipinskiRule
+
+
+class ChEMBLCompound(BaseModel):
+    chembl_id: str
+    smiles: Optional[str] = None
+    similarity: float
+    pref_name: Optional[str] = None
+    max_phase: Optional[int] = Field(default=None, description="Max clinical phase (4=approved)")
+    molecule_type: Optional[str] = None
+
+
+class ChEMBLActivity(BaseModel):
+    chembl_id: str
+    target_name: Optional[str] = None
+    activity_type: Optional[str] = None
+    activity_value: Optional[float] = None
+    activity_units: Optional[str] = None
+
+
+class ChEMBLSearchResponse(BaseModel):
+    query_smiles: str
+    threshold: int
+    similar_compounds: List[ChEMBLCompound]
+    known_activities: List[ChEMBLActivity] = Field(default_factory=list)

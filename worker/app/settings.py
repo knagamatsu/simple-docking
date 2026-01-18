@@ -10,3 +10,7 @@ class Settings(BaseSettings):
     protein_library_path: str = "/protein_library"
     task_timeout_seconds: int = 300
     max_retries: int = 2
+    pocket_method_default: str = "auto"
+    pocket_padding: float = 6.0
+    pocket_min_size: float = 18.0
+    pocket_default_size: float = 20.0

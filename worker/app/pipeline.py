@@ -13,6 +13,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from app.models import Ligand, LigandConformer, Protein, Result, Run, Task
+from app.pocket import resolve_box
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,41 @@ def write_log(log_path: Path, lines: list[str]) -> None:
     ensure_dir(log_path.parent)
     log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
+
+def safe_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def split_pdbqt_models(pdbqt_text: str) -> list[str]:
+    models: list[str] = []
+    current: list[str] = []
+    for line in pdbqt_text.splitlines():
+        if line.startswith("MODEL"):
+            if current:
+                models.append("\n".join(current) + "\n")
+                current = []
+        current.append(line)
+        if line.startswith("ENDMDL"):
+            models.append("\n".join(current) + "\n")
+            current = []
+    if current:
+        models.append("\n".join(current) + "\n")
+    return models
+
+
+def parse_vina_scores(output: str) -> list[float]:
+    scores: list[float] = []
+    for line in output.splitlines():
+        match = re.match(r"^\s*(\d+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)", line)
+        if match:
+            try:
+                scores.append(float(match.group(2)))
+            except ValueError:
+                continue
+    return scores
 
 def generate_pdb_block(ligand: Ligand) -> str:
     mol = None
@@ -124,8 +160,8 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
         protein = session.get(Protein, task.protein_id)
         conformer = session.get(LigandConformer, task.conformer_id) if task.conformer_id else None
 
-        if not ligand or not protein:
-            raise RuntimeError("Missing ligand or protein")
+        if not run or not ligand or not protein:
+            raise RuntimeError("Missing run, ligand, or protein")
 
         if not ligand.smiles and not ligand.molfile:
             ligand.status = "FAILED"
@@ -145,10 +181,18 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
             raise RuntimeError(f"Receptor file not found: {receptor_path}")
 
         # Vina Setup via Subprocess
-        box = protein.default_box_json or {}
+        box, pocket_meta = resolve_box(settings, protein, log_lines)
         center = box.get("center", [0, 0, 0])
-        size = box.get("size", [20, 20, 20])
+        size = box.get("size", [settings.pocket_default_size] * 3)
         
+        options = run.options_json or {}
+        exhaustiveness = safe_int(options.get("exhaustiveness"), 8)
+        num_poses = safe_int(options.get("num_poses"), 1)
+        if num_poses < 1:
+            num_poses = 1
+        if num_poses > 20:
+            num_poses = 20
+
         pose_dir = Path(settings.object_store_path) / "poses" / task.id
         ensure_dir(pose_dir)
         pose_path = pose_dir / "pose_0.pdbqt"
@@ -163,7 +207,8 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
             "--size_x", str(size[0]),
             "--size_y", str(size[1]),
             "--size_z", str(size[2]),
-            "--exhaustiveness", "8",
+            "--exhaustiveness", str(exhaustiveness),
+            "--num_modes", str(num_poses),
             "--out", str(pose_path)
         ]
         
@@ -171,23 +216,39 @@ def execute_task(settings: Settings, session: Session, task: Task) -> None:
         result_proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
         log_lines.append(result_proc.stdout)
         
-        # Parse score from output or file. Vina stdout usually has a table.
+        # Parse scores from output. Vina stdout usually has a table.
         # Format:
         # mode |   affinity | dist from best mode
         #      | (kcal/mol) | rmsd l.b.| rmsd u.b.
         # -----+------------+----------+----------
         #    1 |     -7.5   |      0.000 |      0.000
-        
-        best_score = 0.0
-        match = re.search(r"^\s*1\s+([-\d.]+)\s+", result_proc.stdout, re.MULTILINE)
-        if match:
-            best_score = float(match.group(1))
+
+        scores = parse_vina_scores(result_proc.stdout)
+        best_score = scores[0] if scores else 0.0
+
+        pose_text = pose_path.read_text(encoding="utf-8")
+        pose_models = split_pdbqt_models(pose_text)
+        if not pose_models:
+            pose_models = [pose_text]
+
+        pose_paths: list[str] = []
+        for idx, model_text in enumerate(pose_models):
+            model_path = pose_dir / f"pose_{idx}.pdbqt"
+            model_path.write_text(model_text, encoding="utf-8")
+            pose_paths.append(str(model_path.relative_to(Path(settings.object_store_path))))
 
         result = Result(
             task_id=task.id,
             best_score=best_score,
-            pose_paths_json=[str(pose_path.relative_to(Path(settings.object_store_path)))],
-            metrics_json={"engine": "vina", "exhaustiveness": 8},
+            pose_paths_json=pose_paths,
+            metrics_json={
+                "engine": "vina",
+                "exhaustiveness": exhaustiveness,
+                "num_poses": num_poses,
+                "pose_scores": scores,
+                "pocket": pocket_meta,
+                "box": {"center": center, "size": size},
+            },
         )
         session.add(result)
 

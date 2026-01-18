@@ -15,9 +15,13 @@ dist/
 
 # Data
 /data/
+/protein_library/custom/
 
 # Logs
 *.log
+
+# Worktrees
+.worktrees/
 
 # Editor
 .DS_Store

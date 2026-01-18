@@ -1078,7 +1078,7 @@ HTTP 経由でデータをやり取りするインターフェース。ブラウ
 ### 関連ドキュメント
 
 - [README.md](../README.md) - プロジェクト概要
-- [VERIFICATION.md](../VERIFICATION.md) - 検証手順（開発者向け）
+- [verification.md](./verification.md) - 検証手順（開発者向け）
 - [docs/architecture.md](./architecture.md) - システム構成
 - [docs/deploy.md](./deploy.md) - デプロイ手順
 - [docs/roadmap.md](./roadmap.md) - 開発ロードマップ

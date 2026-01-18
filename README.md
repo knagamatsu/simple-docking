@@ -4,6 +4,7 @@
 
 **📖 ユーザーガイド**: 詳しい使い方は [docs/USER_GUIDE.md](docs/USER_GUIDE.md) を参照してください。
 **⚙️ 環境設定**: ポート番号やパスワードなどの設定は [docs/configuration.md](docs/configuration.md) を参照してください。
+**📚 ドキュメント一覧**: 目的別の一覧は [docs/README.md](docs/README.md) を参照してください。
 
 ## 起動（Ubuntu）
 1. Docker / Docker Compose をインストール

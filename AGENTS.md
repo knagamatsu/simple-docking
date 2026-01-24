@@ -34,7 +34,11 @@
 ## Testing Guidelines
 - Framework: `pytest` for backend.
 - Name tests as `test_*.py`; focus on API flows and error cases.
-- Follow TDD: add/adjust tests before changing API behavior.
+- Follow TDD (Test Driven Development):
+  - **Requirement**: For any new feature, create a simple automated test first (or immediately after prototype).
+  - Write test case in `backend/tests/test_*.py`.
+  - Verify it fails (or would fail) without the feature, then implement and pass.
+  - Do NOT submit "done" without a passing test for the new logic.
 - Example: `backend/tests/test_runs.py` covers run creation and status.
 
 ## Commit & Pull Request Guidelines

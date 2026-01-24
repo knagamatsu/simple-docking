@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Editor } from "ketcher-react";
 import { StandaloneStructServiceProvider } from "ketcher-standalone";
 import { RunContext } from "../App.jsx";
-import { createLigand, createRun } from "../api.js";
+import { createLigand, createRun, getLigands } from "../api.js";
 
 const DEFAULT_TARGETS = ["prot_cdk2", "prot_egfr", "prot_pka"];
 const DEFAULT_PRESET = "Balanced";
@@ -38,6 +38,38 @@ export default function InputPage() {
   const [batchText, setBatchText] = useState(batchInput?.text || "");
   const [batchError, setBatchError] = useState("");
   const [quickRunLoading, setQuickRunLoading] = useState(false);
+
+  // Reference ligands state
+  const [references, setReferences] = useState([]);
+  const [loadingRefs, setLoadingRefs] = useState(false);
+
+  React.useEffect(() => {
+    async function loadRefs() {
+      setLoadingRefs(true);
+      try {
+        const data = await getLigands({ is_reference: true });
+        setReferences(data);
+      } catch (err) {
+        console.error("Failed to load references", err);
+      } finally {
+        setLoadingRefs(false);
+      }
+    }
+    loadRefs();
+  }, []);
+
+  const handleApplyReference = (ligand) => {
+    setName(ligand.name);
+    setMode("smiles");
+    setSmiles(ligand.smiles);
+    if (ketcherInstanceRef.current && ligand.smiles) {
+      try {
+        ketcherInstanceRef.current.setMolecule(ligand.smiles);
+      } catch (e) {
+        console.warn("Failed to update Ketcher", e);
+      }
+    }
+  };
 
   const handleKetcherInit = (ketcher) => {
     ketcherInstanceRef.current = ketcher;
@@ -240,6 +272,21 @@ export default function InputPage() {
               Compound name
               <input value={name} onChange={(event) => setName(event.target.value)} />
             </label>
+
+            {references.length > 0 && (
+              <div style={{ marginBottom: "1rem" }}>
+                <label>Load Reference Compound</label>
+                <select onChange={(e) => {
+                  const leg = references.find(r => r.id === e.target.value);
+                  if (leg) handleApplyReference(leg);
+                }} defaultValue="">
+                  <option value="" disabled>Select a standard inhibitor...</option>
+                  {references.map(ref => (
+                    <option key={ref.id} value={ref.id}>{ref.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="segmented">
               <button

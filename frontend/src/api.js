@@ -72,6 +72,15 @@ export async function pasteProtein(payload) {
   return response.json();
 }
 
+export async function getLigands(params = {}) {
+  const usp = new URLSearchParams();
+  if (params.name) usp.append("name", params.name);
+  if (params.is_reference) usp.append("is_reference", "true");
+  const response = await fetch(`${API_BASE}/ligands?${usp.toString()}`);
+  if (!response.ok) throw new Error("Failed to search ligands");
+  return response.json();
+}
+
 export async function createRun(payload) {
   const response = await request("/runs", {
     method: "POST",

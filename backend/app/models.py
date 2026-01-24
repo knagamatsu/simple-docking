@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.types import JSON
@@ -26,6 +26,11 @@ class Ligand(Base):
     molfile = Column(Text, nullable=True)
     status = Column(String, default="READY", nullable=False)
     error = Column(Text, nullable=True)
+    
+    # Reference compound fields
+    is_reference = Column(Boolean, default=False, nullable=False)
+    target_protein_id = Column(String, nullable=True)
+    reference_label = Column(String, nullable=True)
 
     conformers = relationship("LigandConformer", back_populates="ligand")
 

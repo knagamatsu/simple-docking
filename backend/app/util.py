@@ -7,6 +7,11 @@ def load_protein_manifest(path: Path):
         return json.load(handle)
 
 
+def load_ligand_manifest(path: Path):
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def resolve_path(base: Path, relative: str) -> Path:
     candidate = (base / relative).resolve()
     if base not in candidate.parents and candidate != base:

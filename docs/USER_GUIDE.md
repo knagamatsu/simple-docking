@@ -345,6 +345,30 @@ Ligand B,CN
 
 ---
 
+### リガンド入力（ステップ1）
+
+（中略）
+
+##### 5. 参照化合物のロード（NEW）
+
+**機能**: Gleevec や Erlotinib などの標準阻害剤をワンクリックで入力できます。既存薬剤と比較したい場合に便利です。
+
+**操作手順**:
+1. 入力フォームの「**Load Reference Compound**」ドロップダウンをクリック
+2. リストから目的の薬剤を選択（例: `Imatinib (Gleevec)`）
+3. 名前と SMILES が自動入力されます
+4. 必要に応じて修正し、「**次へ**」をクリック
+
+**収録済みの参照化合物**:
+- **Imatinib (Gleevec)**: ABL阻害剤
+- **Erlotinib (Tarceva)**: EGFR阻害剤
+- **Roscovitine**: CDK2阻害剤
+- **Dasatinib**: Src/ABL阻害剤
+- **Carazolol**: β2AR拮抗薬
+- **Estradiol**: ERαリガンド
+
+---
+
 ### ターゲット選択画面（ステップ2）
 
 ![Targets Page Screenshot](./images/targets.png)

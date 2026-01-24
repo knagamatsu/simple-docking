@@ -47,7 +47,7 @@ from app.schemas import (
 )
 from app.settings import Settings
 from app.tasks import enqueue_task, cancel_task
-from app.util import load_protein_manifest, resolve_path
+from app.util import load_protein_manifest, load_ligand_manifest, resolve_path
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -484,6 +484,40 @@ def protein_to_out(protein: Protein) -> ProteinOut:
     )
 
 
+def seed_ligands(engine, settings: Settings):
+    manifest_path = Path(__file__).parent / "ligand_library" / "manifest.json"
+    if not manifest_path.exists():
+        logger.warning(f"Ligand manifest not found at {manifest_path}")
+        return
+
+    with create_session_factory(engine)() as session:
+        records = load_ligand_manifest(manifest_path)
+        for record in records:
+            # Check if reference ligand already exists (by name and is_reference=True)
+            existing = session.execute(
+                select(Ligand).where(
+                    Ligand.name == record["name"],
+                    Ligand.is_reference == True
+                )
+            ).scalar_one_or_none()
+            
+            if existing:
+                continue
+
+            ligand = Ligand(
+                name=record["name"],
+                smiles=record.get("smiles"),
+                input_type="SMILES",
+                status="READY",
+                is_reference=True,
+                target_protein_id=record.get("target_protein_id"),
+                reference_label=record.get("reference_label"),
+            )
+            session.add(ligand)
+            logger.info(f"Seeded reference ligand: {ligand.name}")
+        session.commit()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title="Simple Docking API")
@@ -516,6 +550,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if "batch_id" not in columns:
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE runs ADD COLUMN batch_id VARCHAR"))
+        
+        if inspector.has_table("ligands"):
+            columns = {col["name"] for col in inspector.get_columns("ligands")}
+            with engine.begin() as conn:
+                if "is_reference" not in columns:
+                    conn.execute(text("ALTER TABLE ligands ADD COLUMN is_reference BOOLEAN DEFAULT FALSE"))
+                if "target_protein_id" not in columns:
+                    conn.execute(text("ALTER TABLE ligands ADD COLUMN target_protein_id VARCHAR"))
+                if "reference_label" not in columns:
+                    conn.execute(text("ALTER TABLE ligands ADD COLUMN reference_label VARCHAR"))
 
     @app.on_event("startup")
     def on_startup():
@@ -523,6 +567,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         apply_schema_updates()
         if settings.seed_proteins_on_startup:
             seed_proteins(engine, settings)
+            seed_ligands(engine, settings)
 
     def get_session():
         with session_factory() as session:
@@ -629,6 +674,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             similar_compounds=similar,
             known_activities=activities,
         )
+
+    @app.get("/ligands", response_model=List[LigandOut])
+    def list_ligands(
+        name: str | None = Query(default=None),
+        is_reference: bool | None = Query(default=None),
+        session: Session = Depends(get_session),
+    ):
+        query = select(Ligand)
+        if name:
+            query = query.where(Ligand.name.ilike(f"%{name}%"))
+        if is_reference is not None:
+            query = query.where(Ligand.is_reference == is_reference)
+        
+        # Limit to 50 for safety
+        ligands = session.execute(query.limit(50)).scalars().all()
+        return [
+            LigandOut(
+                id=ligand.id,
+                created_at=ligand.created_at,
+                name=ligand.name,
+                smiles=ligand.smiles,
+                molfile=ligand.molfile,
+                status=ligand.status,
+                error=ligand.error,
+            ) 
+            for ligand in ligands
+        ]
 
     @app.get("/proteins", response_model=List[ProteinOut])
     def list_proteins(
